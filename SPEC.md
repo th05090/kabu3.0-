@@ -54,10 +54,19 @@ APIから取得した元データを蓄積し、計算ロジックのベース�
 #### `financials` (財務情報)
 - `ticker` (TEXT)
 - `date` (TEXT): 開示日など
-- `revenue` (REAL): 売上
+- `net_sales` (REAL): 売上高
 - `operating_profit` (REAL): 営業利益
-- `eps` (REAL): EPS
-- その他必要項目を随時追加
+- `profit` (REAL): 当期純利益
+- `equity_to_asset_ratio` (REAL): 自己資本比率
+- `shares_outstanding` (REAL): 発行済株式数
+- `forecast_net_sales` (REAL): 予想売上高
+- `forecast_operating_profit` (REAL): 予想営業利益
+- `forecast_profit` (REAL): 予想当期純利益
+- `forecast_dividend` (REAL): 予想1株あたり配当
+- `eps` (REAL): 1株あたり利益(EPS)
+- `adj_eps` (REAL): 株式分割調整後EPS
+- `adj_dividend` (REAL): 株式分割調整後配当
+- `adj_shares_outstanding` (REAL): 株式分割調整後発行済株式数
 - PK: `(ticker, date)`
 
 ### `stocks` テーブル (Phase 1: Screener用高速スナップショット)
@@ -79,10 +88,10 @@ APIから取得した元データを蓄積し、計算ロジックのベース�
 - `trading_value_ratio` (REAL): 売買代金倍率
 
 #### ファンダメンタル指標
-- `revenue_growth_pct` (REAL): 売上成長率%
-- `operating_profit_growth_pct` (REAL): 営利成長率%
+- `revenue_growth_pct` (REAL): 売上成長率% (今期予想 ÷ 前回本決算実績 - 1)
+- `operating_profit_growth_pct` (REAL): 営利成長率% (前期赤字の場合は NULL)
 - `operating_margin_pct` (REAL): 営業利益率%
-- `eps_growth_pct` (REAL): EPS成長率%
+- `eps_growth_pct` (REAL): EPS成長率% (前期赤字の場合は NULL)
 - `equity_ratio_pct` (REAL): 自己資本比率%
 - `operating_cf` (REAL): 営業CF
 - `dividend_yield_pct` (REAL): 配当利回り%

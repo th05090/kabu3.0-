@@ -39,16 +39,21 @@ async function main() {
   `);
 
   // financials (財務情報)
+  await db.execute('DROP TABLE IF EXISTS financials');
   await db.execute(`
     CREATE TABLE IF NOT EXISTS financials (
       ticker TEXT,
       date TEXT,
-      revenue REAL,
+      net_sales REAL,
       operating_profit REAL,
-      net_profit REAL,
-      eps REAL,
-      dividend REAL,
+      profit REAL,
+      equity_to_asset_ratio REAL,
       shares_outstanding REAL,
+      forecast_net_sales REAL,
+      forecast_operating_profit REAL,
+      forecast_profit REAL,
+      forecast_dividend REAL,
+      eps REAL,
       adj_eps REAL,
       adj_dividend REAL,
       adj_shares_outstanding REAL,

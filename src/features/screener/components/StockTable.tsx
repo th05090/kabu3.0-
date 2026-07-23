@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 
 // DBから返される行の型（実際には不要なものも多いが網羅）
 export type StockRow = {
@@ -52,6 +53,10 @@ export type StockRow = {
 };
 
 export function StockTable({ data }: { data: StockRow[] }) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
   // プラスマイナスで色を分けるヘルパー関数
   const colorClass = (val: number) => {
     if (val > 0) return 'text-green';
@@ -60,6 +65,51 @@ export function StockTable({ data }: { data: StockRow[] }) {
   };
 
   const boolToText = (val: boolean | number) => val ? '〇' : '-';
+
+  const SortableHeader = ({ field, children, className }: { field: string, children: React.ReactNode, className?: string }) => {
+    const currentSort = searchParams.get('sort');
+    const currentOrder = searchParams.get('order');
+
+    const handleClick = () => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (currentSort === field) {
+        if (currentOrder === 'desc') {
+          params.set('order', 'asc');
+        } else if (currentOrder === 'asc') {
+          params.delete('sort');
+          params.delete('order');
+        } else {
+          params.set('order', 'desc');
+        }
+      } else {
+        params.set('sort', field);
+        params.set('order', 'desc');
+      }
+      
+      // Preserve page param if any, but reset to page 1 is often better when sorting
+      params.set('page', '1');
+      
+      router.push(`${pathname}?${params.toString()}`);
+    };
+
+    let icon = '';
+    if (currentSort === field) {
+      icon = currentOrder === 'asc' ? ' ▲' : ' ▼';
+    }
+
+    return (
+      <th 
+        className={`${className || ''} cursor-pointer hover:bg-[var(--hover-bg)] select-none`} 
+        onClick={handleClick}
+        title="クリックしてソート"
+      >
+        <div className="flex items-center justify-between whitespace-nowrap">
+          <span>{children}</span>
+          <span className="text-xs text-[var(--primary)] ml-1 w-3 text-center">{icon}</span>
+        </div>
+      </th>
+    );
+  };
 
   return (
     <div className="table-container">
@@ -71,30 +121,30 @@ export function StockTable({ data }: { data: StockRow[] }) {
             <th>市場</th>
             <th>業種(テーマ)</th>
             <th>テーマ点</th>
-            <th>現在株価</th>
-            <th>時価総額(億)</th>
-            <th>5日平均売買(億)</th>
-            <th>売上成長率(%)</th>
-            <th>営利成長率(%)</th>
-            <th>営業利益率(%)</th>
-            <th>EPS成長率(%)</th>
-            <th>自己資本比率(%)</th>
+            <SortableHeader field="current_price">現在株価</SortableHeader>
+            <SortableHeader field="market_cap">時価総額(億)</SortableHeader>
+            <SortableHeader field="avg_trading_value_5d">5日平均売買(億)</SortableHeader>
+            <SortableHeader field="revenue_growth_pct">売上成長率(%)</SortableHeader>
+            <SortableHeader field="operating_profit_growth_pct">営利成長率(%)</SortableHeader>
+            <SortableHeader field="operating_margin_pct">営業利益率(%)</SortableHeader>
+            <SortableHeader field="eps_growth_pct">EPS成長率(%)</SortableHeader>
+            <SortableHeader field="equity_ratio_pct">自己資本比率(%)</SortableHeader>
             <th>営業CF</th>
-            <th>配当利回り(%)</th>
+            <SortableHeader field="dividend_yield_pct">配当利回り(%)</SortableHeader>
             <th>予想達成率(%)</th>
             <th>決算反応(%)</th>
             <th>決算後上昇(%)</th>
             <th>決算後高値から下落(%)</th>
             <th>25日線</th>
             <th>25日線上</th>
-            <th>25日乖離(%)</th>
+            <SortableHeader field="sma_25_deviation_pct">25日乖離(%)</SortableHeader>
             <th>75日線上</th>
             <th>200日線上</th>
             <th>長期トレンド</th>
             <th>出来高倍率</th>
             <th>52週高値</th>
             <th>52週高値乖離</th>
-            <th>52週高値距離(%)</th>
+            <SortableHeader field="distance_to_high_52w_pct">52週高値距離(%)</SortableHeader>
             <th>52週高値更新</th>
             <th>決算区分</th>
             <th>決算日</th>
@@ -112,53 +162,65 @@ export function StockTable({ data }: { data: StockRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {data.map((stock) => (
+          {data.map((stock) => {
+            const fmt = (v: any, prefix='', suffix='') => v == null ? '-' : `${prefix}${Number(v).toLocaleString()}${suffix}`;
+            const cls = (v: any) => v == null ? '' : colorClass(Number(v));
+            return (
             <tr key={stock.ticker}>
-              <td className="sticky-col">{stock.ticker}</td>
-              <td className="sticky-col font-bold">{stock.name}</td>
+              <td className="sticky-col">
+                <a 
+                  href={`https://finance.yahoo.co.jp/quote/${stock.ticker.slice(0, 4)}.T/chart`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--primary)', textDecoration: 'underline', fontWeight: 'bold' }}
+                >
+                  {stock.ticker.slice(0, 4)}
+                </a>
+              </td>
+              <td className="sticky-col font-bold truncate" style={{ maxWidth: '180px' }} title={stock.name}>{stock.name}</td>
               <td>{stock.market}</td>
               <td>{stock.industry}</td>
-              <td className="text-right font-mono">{stock.theme_score}</td>
-              <td className="text-right font-mono">¥{stock.current_price.toLocaleString()}</td>
-              <td className="text-right font-mono">{stock.market_cap.toLocaleString()}</td>
-              <td className="text-right font-mono">{stock.avg_trading_value_5d.toLocaleString()}</td>
-              <td className={`text-right font-mono ${colorClass(stock.revenue_growth_pct)}`}>{stock.revenue_growth_pct}%</td>
-              <td className={`text-right font-mono ${colorClass(stock.operating_profit_growth_pct)}`}>{stock.operating_profit_growth_pct}%</td>
-              <td className="text-right font-mono">{stock.operating_margin_pct}%</td>
-              <td className={`text-right font-mono ${colorClass(stock.eps_growth_pct)}`}>{stock.eps_growth_pct}%</td>
-              <td className="text-right font-mono">{stock.equity_ratio_pct}%</td>
-              <td className={`text-right font-mono ${colorClass(stock.operating_cf)}`}>{stock.operating_cf.toLocaleString()}</td>
-              <td className="text-right font-mono">{stock.dividend_yield_pct}%</td>
-              <td className="text-right font-mono">{stock.forecast_achievement_pct}%</td>
-              <td className={`text-right font-mono ${colorClass(stock.earnings_reaction_pct)}`}>{stock.earnings_reaction_pct}%</td>
-              <td className={`text-right font-mono ${colorClass(stock.post_earnings_rise_pct)}`}>{stock.post_earnings_rise_pct}%</td>
-              <td className={`text-right font-mono ${colorClass(stock.drop_from_post_earnings_high_pct)}`}>{stock.drop_from_post_earnings_high_pct}%</td>
-              <td className="text-right font-mono">¥{stock.sma_25.toLocaleString()}</td>
+              <td className="text-right font-mono">{fmt(stock.theme_score)}</td>
+              <td className="text-right font-mono">{fmt(stock.current_price, '¥')}</td>
+              <td className="text-right font-mono">{fmt(stock.market_cap)}</td>
+              <td className="text-right font-mono">{fmt(stock.avg_trading_value_5d)}</td>
+              <td className={`text-right font-mono ${cls(stock.revenue_growth_pct)}`}>{fmt(stock.revenue_growth_pct, '', '%')}</td>
+              <td className={`text-right font-mono ${cls(stock.operating_profit_growth_pct)}`}>{fmt(stock.operating_profit_growth_pct, '', '%')}</td>
+              <td className="text-right font-mono">{fmt(stock.operating_margin_pct, '', '%')}</td>
+              <td className={`text-right font-mono ${cls(stock.eps_growth_pct)}`}>{fmt(stock.eps_growth_pct, '', '%')}</td>
+              <td className="text-right font-mono">{fmt(stock.equity_ratio_pct, '', '%')}</td>
+              <td className={`text-right font-mono ${cls(stock.operating_cf)}`}>{fmt(stock.operating_cf)}</td>
+              <td className="text-right font-mono">{fmt(stock.dividend_yield_pct, '', '%')}</td>
+              <td className="text-right font-mono">{fmt(stock.forecast_achievement_pct, '', '%')}</td>
+              <td className={`text-right font-mono ${cls(stock.earnings_reaction_pct)}`}>{fmt(stock.earnings_reaction_pct, '', '%')}</td>
+              <td className={`text-right font-mono ${cls(stock.post_earnings_rise_pct)}`}>{fmt(stock.post_earnings_rise_pct, '', '%')}</td>
+              <td className={`text-right font-mono ${cls(stock.drop_from_post_earnings_high_pct)}`}>{fmt(stock.drop_from_post_earnings_high_pct, '', '%')}</td>
+              <td className="text-right font-mono">{fmt(stock.sma_25, '¥')}</td>
               <td className="text-center">{boolToText(stock.is_above_sma_25)}</td>
-              <td className={`text-right font-mono ${colorClass(stock.sma_25_deviation_pct)}`}>{stock.sma_25_deviation_pct}%</td>
+              <td className={`text-right font-mono ${cls(stock.sma_25_deviation_pct)}`}>{fmt(stock.sma_25_deviation_pct, '', '%')}</td>
               <td className="text-center">{boolToText(stock.is_above_sma_75)}</td>
               <td className="text-center">{boolToText(stock.is_above_sma_200)}</td>
-              <td>{stock.long_term_trend}</td>
-              <td className="text-right font-mono">{stock.volume_ratio}x</td>
-              <td className="text-right font-mono">¥{stock.high_52w.toLocaleString()}</td>
-              <td className={`text-right font-mono ${colorClass(stock.high_52w_deviation)}`}>{stock.high_52w_deviation}</td>
-              <td className={`text-right font-mono ${colorClass(stock.distance_to_high_52w_pct)}`}>{stock.distance_to_high_52w_pct}%</td>
+              <td>{stock.long_term_trend || '-'}</td>
+              <td className="text-right font-mono">{fmt(stock.volume_ratio, '', 'x')}</td>
+              <td className="text-right font-mono">{fmt(stock.high_52w, '¥')}</td>
+              <td className={`text-right font-mono ${cls(stock.high_52w_deviation)}`}>{fmt(stock.high_52w_deviation)}</td>
+              <td className={`text-right font-mono ${cls(stock.distance_to_high_52w_pct)}`}>{fmt(stock.distance_to_high_52w_pct, '', '%')}</td>
               <td className="text-center">{boolToText(stock.is_high_52w_update)}</td>
-              <td>{stock.earnings_category}</td>
-              <td>{stock.earnings_date}</td>
-              <td className="text-right font-mono">{stock.days_since_earnings}日</td>
-              <td>{stock.next_earnings_date_prediction}</td>
-              <td className="text-right font-mono">{stock.remaining_business_days}日</td>
+              <td>{stock.earnings_category || '-'}</td>
+              <td>{stock.earnings_date || '-'}</td>
+              <td className="text-right font-mono">{fmt(stock.days_since_earnings, '', '日')}</td>
+              <td>{stock.next_earnings_date_prediction || '-'}</td>
+              <td className="text-right font-mono">{fmt(stock.remaining_business_days, '', '日')}</td>
               <td className="text-center">{boolToText(stock.is_perfect_order)}</td>
               <td className="text-center">{boolToText(stock.is_golden_cross)}</td>
-              <td className="text-right font-mono">{stock.rsi}</td>
-              <td className={`text-right font-mono ${colorClass(stock.roc)}`}>{stock.roc}</td>
-              <td className={`text-right font-mono ${colorClass(stock.return_5d_pct)}`}>{stock.return_5d_pct}%</td>
-              <td className={`text-right font-mono ${colorClass(stock.return_20d_pct)}`}>{stock.return_20d_pct}%</td>
+              <td className="text-right font-mono">{fmt(stock.rsi)}</td>
+              <td className={`text-right font-mono ${cls(stock.roc)}`}>{fmt(stock.roc)}</td>
+              <td className={`text-right font-mono ${cls(stock.return_5d_pct)}`}>{fmt(stock.return_5d_pct, '', '%')}</td>
+              <td className={`text-right font-mono ${cls(stock.return_20d_pct)}`}>{fmt(stock.return_20d_pct, '', '%')}</td>
               <td className="text-center">{boolToText(stock.is_high_20d_update)}</td>
               <td className="text-center">{boolToText(stock.is_high_60d_update)}</td>
             </tr>
-          ))}
+          );})}
         </tbody>
       </table>
     </div>

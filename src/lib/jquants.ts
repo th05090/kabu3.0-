@@ -82,7 +82,55 @@ export async function syncJQuants() {
       });
     }
 
-    // 2. 日足データの取得 (2024年以降を対象)
+    // 2. 財務データの取得 (fins/summary)
+    const finsList = await fetchJQuants('/v2/bulk/list?endpoint=fins/summary');
+    const finsFiles = (finsList.data || []).filter((f: any) => {
+      return f.Key.includes('/2024/') || f.Key.includes('/2025/') || f.Key.includes('/2026/') || f.Key.includes('/live/');
+    });
+    console.log(`[J-Quants] Found ${finsFiles.length} financials files to process since 2024.`);
+    finsFiles.sort((a: any, b: any) => a.Key.localeCompare(b.Key));
+
+    for (const file of finsFiles) {
+      console.log(`[J-Quants] Processing Financials: ${file.Key}`);
+      const getRes = await fetchJQuants(`/v2/bulk/get?key=${file.Key}`);
+      
+      let batch: any[] = [];
+      const BATCH_SIZE = 5000;
+      const flushBatch = async () => {
+        if (batch.length === 0) return;
+        const transaction = batch.map(row => {
+          const num = (v: any) => (v === '' || v == null) ? null : parseFloat(v);
+          const eps = num(row.EPS) || num(row.NCEPS);
+          const div = num(row.DivAnn) || num(row.FDivAnn) || num(row.FDivFY) || num(row.NxFDivAnn) || num(row.NxFDivFY);
+          const shares = num(row.ShOutFY);
+          
+          return {
+            sql: `INSERT OR REPLACE INTO financials 
+                  (ticker, date, net_sales, operating_profit, profit, equity_to_asset_ratio, shares_outstanding, forecast_net_sales, forecast_operating_profit, forecast_profit, forecast_dividend, eps, adj_eps, adj_dividend, adj_shares_outstanding) 
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            args: [
+              row.Code, row.DiscDate, 
+              num(row.Sales) || num(row.NCSales), num(row.OP) || num(row.NCOP), num(row.NP) || num(row.NCNP), 
+              num(row.EqAR) || num(row.NCEqAR), shares,
+              num(row.NxFSales) || num(row.FSales) || num(row.NxFNCSales) || num(row.FNCSales), 
+              num(row.NxFOP) || num(row.FOP) || num(row.NxFNCOP) || num(row.FNCOP), 
+              num(row.NxFNp) || num(row.FNP) || num(row.NxFNCNP) || num(row.FNCNP), div,
+              eps, eps, div, shares
+            ]
+          };
+        });
+        await db.batch(transaction, 'write');
+        batch = [];
+      };
+
+      await downloadAndProcessCsv(getRes.url, async (row) => {
+        batch.push(row);
+        if (batch.length >= BATCH_SIZE) await flushBatch();
+      });
+      await flushBatch();
+    }
+
+    // 3. 日足データの取得 (2024年以降を対象)
     const quotesList = await fetchJQuants('/v2/bulk/list?endpoint=equities/bars/daily');
     const quoteFiles = (quotesList.data || []).filter((f: any) => {
       // "equities/bars/daily/historical/2024/..." などの文字列から年を抽出してフィルタ
@@ -126,6 +174,7 @@ export async function syncJQuants() {
         // 過去分をUPDATEするクエリもトランザクションに積む
         for (const s of splits) {
           const factor = parseFloat(s.AdjFactor);
+          // 日足の調整
           transaction.push({
             sql: `UPDATE daily_quotes SET 
                   adj_open = adj_open * ?, 
@@ -135,6 +184,15 @@ export async function syncJQuants() {
                   adj_volume = adj_volume / ? 
                   WHERE ticker = ? AND date < ?`,
             args: [factor, factor, factor, factor, factor, s.Code, s.Date]
+          });
+          // 財務の調整 (EPS, 1株配当はfactor倍、発行済株式数はfactorで割る)
+          transaction.push({
+            sql: `UPDATE financials SET 
+                  adj_eps = adj_eps * ?, 
+                  adj_dividend = adj_dividend * ?, 
+                  adj_shares_outstanding = adj_shares_outstanding / ? 
+                  WHERE ticker = ? AND date < ?`,
+            args: [factor, factor, factor, s.Code, s.Date]
           });
           console.log(`[J-Quants] Stock Split Detected: ${s.Code} on ${s.Date} (Factor: ${factor})`);
         }
