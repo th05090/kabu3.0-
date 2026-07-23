@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { LayoutDashboard, BarChart2, Lightbulb, Bell, Briefcase } from 'lucide-react';
+import { SyncButton } from '@/components/SyncButton';
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -28,6 +29,9 @@ export default function RootLayout({
               <a href="#" className="nav-item"><Bell size={20} /><span>アラート</span></a>
               <a href="#" className="nav-item"><Briefcase size={20} /><span>ポートフォリオ</span></a>
             </nav>
+            <div className="sidebar-footer">
+              <SyncButton />
+            </div>
           </aside>
           <div className="app-main">
             {children}

@@ -26,14 +26,42 @@
 
 ## 3. 開発ロードマップ (フェーズ定義)
 - **Phase 1**: 全銘柄スクリーナー（表とフィルタ機能）の構築
+- **Phase 1.5**: 実データ取得・履歴蓄積基盤の構築 (J-Quants API Bulk)
 - **Phase 2**: 個別銘柄分析（指標推移、チャート表示）の構築
 - **Phase 3**: AIテーマ判定およびテーマ分析（ツリーマップ、バブルチャート等）の実装
 - **Phase 4**: 購入関連システム（アラート管理、ポートフォリオ管理、バックテスト）の実装
 
 ## 4. データベーススキーマ (SQLite)
 
-### `stocks` テーブル (Phase 1: Screener用統合テーブル)
-スクリーニングを高速に行うため、初期フェーズでは基礎情報と日次計算指標を統合した1テーブル構成とする。
+### 履歴保存用テーブル群 (Phase 1.5以降の主軸)
+APIから取得した元データを蓄積し、計算ロジックのベースとなるテーブル。
+
+#### `equities_master` (銘柄基本情報)
+- `ticker` (TEXT PK): 銘柄コード
+- `name` (TEXT): 銘柄名
+- `market` (TEXT): 市場区分
+- `industry` (TEXT): 業種 (17業種または33業種)
+- `last_updated` (TEXT): 最終更新日時
+
+#### `daily_quotes` (日足データ)
+- `ticker` (TEXT)
+- `date` (TEXT)
+- `open` (REAL), `high` (REAL), `low` (REAL), `close` (REAL): 四本値
+- `volume` (REAL): 出来高
+- `turnover` (REAL): 売買代金
+- PK: `(ticker, date)`
+
+#### `financials` (財務情報)
+- `ticker` (TEXT)
+- `date` (TEXT): 開示日など
+- `revenue` (REAL): 売上
+- `operating_profit` (REAL): 営業利益
+- `eps` (REAL): EPS
+- その他必要項目を随時追加
+- PK: `(ticker, date)`
+
+### `stocks` テーブル (Phase 1: Screener用高速スナップショット)
+履歴データからテクニカル・ファンダメンタル計算を行い、最新状態のみを保持するテーブル。UI表示に直結。
 
 #### 銘柄基本情報
 - `ticker` (TEXT PK): 銘柄コード
