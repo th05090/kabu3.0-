@@ -131,34 +131,34 @@ export function StockTable({ data }: { data: StockRow[] }) {
             <SortableHeader field="equity_ratio_pct">自己資本比率(%)</SortableHeader>
             <th>営業CF</th>
             <SortableHeader field="dividend_yield_pct">配当利回り(%)</SortableHeader>
-            <th>予想達成率(%)</th>
-            <th>決算反応(%)</th>
-            <th>決算後上昇(%)</th>
-            <th>決算後高値から下落(%)</th>
+            <SortableHeader field="forecast_achievement_pct">予想達成率(%)</SortableHeader>
+            <SortableHeader field="earnings_reaction_pct">決算反応(%)</SortableHeader>
+            <SortableHeader field="post_earnings_rise_pct">決算後上昇(%)</SortableHeader>
+            <SortableHeader field="drop_from_post_earnings_high_pct">決算後高値から下落(%)</SortableHeader>
             <th>25日線</th>
-            <th>25日線上</th>
+            <SortableHeader field="is_above_sma_25">25日線上</SortableHeader>
             <SortableHeader field="sma_25_deviation_pct">25日乖離(%)</SortableHeader>
-            <th>75日線上</th>
-            <th>200日線上</th>
-            <th>長期トレンド</th>
-            <th>出来高倍率</th>
+            <SortableHeader field="is_above_sma_75">75日線上</SortableHeader>
+            <SortableHeader field="is_above_sma_200">200日線上</SortableHeader>
+            <SortableHeader field="long_term_trend">長期トレンド</SortableHeader>
+            <SortableHeader field="volume_ratio">出来高倍率</SortableHeader>
             <th>52週高値</th>
             <th>52週高値乖離</th>
             <SortableHeader field="distance_to_high_52w_pct">52週高値距離(%)</SortableHeader>
-            <th>52週高値更新</th>
+            <SortableHeader field="is_high_52w_update">52週高値更新</SortableHeader>
             <th>決算区分</th>
-            <th>決算日</th>
-            <th>決算後日数</th>
-            <th>次回決算日予測</th>
-            <th>残り営業日</th>
-            <th>パーフェクトオーダー</th>
-            <th>ゴールデンクロス</th>
-            <th>RSI</th>
-            <th>ROC</th>
-            <th>5日騰落率(%)</th>
-            <th>20日騰落率(%)</th>
-            <th>20日高値更新</th>
-            <th>60日高値更新</th>
+            <SortableHeader field="earnings_date">決算日</SortableHeader>
+            <SortableHeader field="days_since_earnings">決算後日数</SortableHeader>
+            <SortableHeader field="next_earnings_date_prediction">次回決算日予測</SortableHeader>
+            <SortableHeader field="remaining_business_days">残り営業日</SortableHeader>
+            <SortableHeader field="is_perfect_order">パーフェクトオーダー</SortableHeader>
+            <SortableHeader field="is_golden_cross">ゴールデンクロス</SortableHeader>
+            <SortableHeader field="rsi">RSI</SortableHeader>
+            <SortableHeader field="roc">ROC</SortableHeader>
+            <SortableHeader field="return_5d_pct">5日騰落率(%)</SortableHeader>
+            <SortableHeader field="return_20d_pct">20日騰落率(%)</SortableHeader>
+            <SortableHeader field="is_high_20d_update">20日高値更新</SortableHeader>
+            <SortableHeader field="is_high_60d_update">60日高値更新</SortableHeader>
           </tr>
         </thead>
         <tbody>

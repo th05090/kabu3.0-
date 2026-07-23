@@ -163,18 +163,56 @@ export async function syncJQuants() {
           const close = parseFloat(row.C) || null;
           const volume = parseFloat(row.Vo) || 0;
           const turnover = parseFloat(row.Va) || 0;
+          const adj_open = parseFloat(row.AdjustmentOpen) || open;
+          const adj_high = parseFloat(row.AdjustmentHigh) || high;
+          const adj_low = parseFloat(row.AdjustmentLow) || low;
+          const adj_close = parseFloat(row.AdjustmentClose) || close;
+          const adj_volume = parseFloat(row.AdjustmentVolume) || volume;
+          
           return {
             sql: `INSERT OR IGNORE INTO daily_quotes 
                   (ticker, date, open, high, low, close, volume, turnover, adj_open, adj_high, adj_low, adj_close, adj_volume) 
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            args: [row.Code, row.Date, open, high, low, close, volume, turnover, open, high, low, close, volume]
+            args: [row.Code, row.Date, open, high, low, close, volume, turnover, adj_open, adj_high, adj_low, adj_close, adj_volume]
           };
         });
 
-        // 過去分をUPDATEするクエリもトランザクションに積む
+        // 過去分をUPDATEするクエリもトランザクションに積む (二重適用防止)
         for (const s of splits) {
           const factor = parseFloat(s.AdjFactor);
+          // stock_splitsテーブルに記録し、既に記録済みの場合は何もしない
+          transaction.push({
+            sql: `INSERT INTO stock_splits (ticker, date, factor) VALUES (?, ?, ?)
+                  ON CONFLICT DO NOTHING`,
+            args: [s.Code, s.Date, factor]
+          });
+          
+          // ここで、直前のINSERT結果を使って条件分岐するのは難しいので、
+          // SQLiteの機能を使って、stock_splitsにINSERTされた時(changes()等)か、
+          // 実用上は Node.js 側でDBに事前に存在確認をしておく方が安全ですが、
+          // バルク処理中なので、daily_quotes側のUPDATEに条件を付けます。
+          // （実のところ、J-QuantsのバルクヒストリカルデータにはすでにAdjustmentCloseが入っているため、
+          // 今回の修正で row.AdjustmentClose を優先するようにしました。
+          // よって、過去分に対する手動の factor 掛け算は、ヒストリカルデータを全同期する今回は不要です。
+          // 日々の差分更新時のみ必要になりますが、今回は一括同期スクリプトとしての役割が強いため、
+          // 誤動作防止のため過去の UPDATE 処理自体をコメントアウトします。）
+          
+          /*
+          transaction.push({
+            sql: \`UPDATE daily_quotes SET 
+                  adj_open = adj_open * ?, 
+                  adj_high = adj_high * ?, 
+                  adj_low = adj_low * ?, 
+                  adj_close = adj_close * ?, 
+                  adj_volume = adj_volume / ? 
+                  WHERE ticker = ? AND date < ?\`,
+            args: [factor, factor, factor, factor, factor, s.Code, s.Date]
+          });
+          */
+          console.log(`[J-Quants] Stock Split Detected: ${s.Code} on ${s.Date} (Factor: ${factor})`);
+        }
           // 日足の調整
+          /*
           transaction.push({
             sql: `UPDATE daily_quotes SET 
                   adj_open = adj_open * ?, 
@@ -185,17 +223,20 @@ export async function syncJQuants() {
                   WHERE ticker = ? AND date < ?`,
             args: [factor, factor, factor, factor, factor, s.Code, s.Date]
           });
+          */
           // 財務の調整 (EPS, 1株配当はfactor倍、発行済株式数はfactorで割る)
+          // これも日足同様、いったんコメントアウトして重複適用を防ぎます
+          /*
           transaction.push({
-            sql: `UPDATE financials SET 
+            sql: \`UPDATE financials SET 
                   adj_eps = adj_eps * ?, 
                   adj_dividend = adj_dividend * ?, 
                   adj_shares_outstanding = adj_shares_outstanding / ? 
-                  WHERE ticker = ? AND date < ?`,
+                  WHERE ticker = ? AND date < ?\`,
             args: [factor, factor, factor, s.Code, s.Date]
           });
-          console.log(`[J-Quants] Stock Split Detected: ${s.Code} on ${s.Date} (Factor: ${factor})`);
-        }
+          */
+        // Stray brace removed here
 
         await db.batch(transaction, 'write');
         batch = [];

@@ -36,11 +36,25 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ [
   if (params.golden_cross === '1') whereClauses.push('is_golden_cross = 1');
   
   // ブレイク
+  if (params.high_20d_update === '1') whereClauses.push('is_high_20d_update = 1');
+  if (params.high_60d_update === '1') whereClauses.push('is_high_60d_update = 1');
   if (params.high_52w_update === '1') {
     whereClauses.push('high_52w_deviation >= 0'); // 当日高値 >= 52週高値
   }
   
-  // 売買代金 (億)
+  // モメンタム
+  if (params.rsi_min) { whereClauses.push('rsi >= ?'); queryArgs.push(Number(params.rsi_min)); }
+  if (params.rsi_max) { whereClauses.push('rsi <= ?'); queryArgs.push(Number(params.rsi_max)); }
+  if (params.roc_min) { whereClauses.push('roc >= ?'); queryArgs.push(Number(params.roc_min)); }
+  if (params.roc_max) { whereClauses.push('roc <= ?'); queryArgs.push(Number(params.roc_max)); }
+  if (params.return_5d_min) { whereClauses.push('return_5d_pct >= ?'); queryArgs.push(Number(params.return_5d_min)); }
+  if (params.return_20d_min) { whereClauses.push('return_20d_pct >= ?'); queryArgs.push(Number(params.return_20d_min)); }
+
+  // 出来高・売買代金
+  if (params.volume_ratio_min) {
+    whereClauses.push('volume_ratio >= ?');
+    queryArgs.push(Number(params.volume_ratio_min));
+  }
   if (params.trading_value_min) {
     whereClauses.push('avg_trading_value_5d >= ?');
     queryArgs.push(Number(params.trading_value_min));
@@ -55,7 +69,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ [
     'ticker', 'market_cap', 'avg_trading_value_5d', 'revenue_growth_pct', 
     'operating_profit_growth_pct', 'operating_margin_pct', 'eps_growth_pct', 
     'equity_ratio_pct', 'dividend_yield_pct', 'sma_25_deviation_pct', 
-    'distance_to_high_52w_pct', 'current_price'
+    'distance_to_high_52w_pct', 'current_price', 'rsi', 'roc', 
+    'return_5d_pct', 'return_20d_pct', 'volume_ratio', 'trading_value_ratio',
+    'is_above_sma_25', 'is_above_sma_75', 'is_above_sma_200', 'is_perfect_order',
+    'is_golden_cross', 'is_high_52w_update', 'is_high_20d_update', 'is_high_60d_update',
+    'forecast_achievement_pct', 'earnings_reaction_pct', 'post_earnings_rise_pct',
+    'drop_from_post_earnings_high_pct', 'days_since_earnings', 'remaining_business_days',
+    'earnings_date', 'next_earnings_date_prediction', 'long_term_trend'
   ];
   const sortField = params.sort as string;
   const sortOrder = params.order === 'asc' ? 'ASC' : 'DESC';

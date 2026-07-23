@@ -113,7 +113,7 @@ APIから取得した元データを蓄積し、計算ロジックのベース�
 - `sma_25_deviation_pct` (REAL): 25日乖離%
 - `is_above_sma_75` (BOOLEAN): 75日線上かどうか
 - `is_above_sma_200` (BOOLEAN): 200日線上かどうか
-- `long_term_trend` (TEXT): 長期トレンド
+- `long_term_trend` (TEXT): 長期トレンド (75日線と200日線が両方上向きか等)
 - `high_52w` (REAL): 52週高値
 - `high_52w_deviation` (REAL): 52週高値乖離
 - `distance_to_high_52w_pct` (REAL): 52週高値距離%
