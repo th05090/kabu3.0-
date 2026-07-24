@@ -167,6 +167,8 @@ APIから取得した元データを蓄積し、計算ロジックのベース�
 
 ### 8.1 データパイプライン（バッチ処理）の設計
 - **履歴蓄積・再計算**: J-Quants API等からの履歴蓄積、および `stocks` テーブルの再計算処理は、フロントエンドやNext.jsのAPI Routesからは切り離し、**別プロセスのNode.jsスクリプトとして独立**させること（例: `src/scripts/run_sync.ts` などに配置し、Node/Cronで実行する）。
+  - **差分同期（Incremental Sync）**: J-Quants APIからのバルクデータ取得時は、毎回全件取得するのではなく、ローカルDBに新設した `sync_history` テーブルを活用し、未取得の新規ファイルのみを抽出してダウンロード・パースする差分同期ロジックを実装済み。
+  - **株式分割の遡及調整**: 日足データ等の取得時に `AdjFactor` を検知した場合、新規の差分ファイルからであっても過去の全履歴データ（日足・財務）に対して自動で係数調整（UPDATE）が行われる設計となっている。
 - **AI・RAGパイプライン (Gemma3 + Qdrant ハイブリッド検索)**: 決算PDFからハルシネーションのない抽出を行うため、`src/scripts/analyze_stock_rag.ts` を中心とした以下のRAGアーキテクチャを稼働させる。
   1. **Markdown解析**: `docling` (Python/CUDA環境) を用いたPDFの高精度Markdown化 (`src/scripts/pdf_to_md_docling.py`)
   2. **見出しベースのチャンキング (Header-Aware Chunking)**: 表や文脈の分断を防ぐため、Markdownの見出し（`#`, `##`）単位でセクションを切り出し、パンくずリストメタデータ（`[大項目 > 中項目]`）を付与してチャンク化（`src/scripts/rag/chunker.ts`）。
