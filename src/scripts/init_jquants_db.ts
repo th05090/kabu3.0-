@@ -57,7 +57,86 @@ async function main() {
       adj_eps REAL,
       adj_dividend REAL,
       adj_shares_outstanding REAL,
+      ordinary_profit REAL,
+      total_assets REAL,
+      equity REAL,
+      operating_cash_flow REAL,
+      investing_cash_flow REAL,
+      financing_cash_flow REAL,
+      cash_and_equivalents REAL,
       PRIMARY KEY (ticker, date)
+    );
+  `);
+
+  // stocks (集計済み最新指標データ)
+  await db.execute('DROP TABLE IF EXISTS stocks');
+  await db.execute(`
+    CREATE TABLE stocks (
+      ticker TEXT PRIMARY KEY,
+      name TEXT,
+      market TEXT,
+      industry TEXT,
+      current_price REAL,
+      
+      -- トレンド指標
+      sma_25 REAL,
+      is_above_sma_25 BOOLEAN,
+      sma_25_deviation_pct REAL,
+      is_above_sma_75 BOOLEAN,
+      is_above_sma_200 BOOLEAN,
+      is_golden_cross BOOLEAN,
+      is_perfect_order BOOLEAN,
+      long_term_trend TEXT,
+      
+      -- ブレイクアウト・高値
+      high_52w REAL,
+      high_52w_deviation REAL,
+      distance_to_high_52w_pct REAL,
+      is_high_20d_update BOOLEAN,
+      is_high_60d_update BOOLEAN,
+      is_high_52w_update BOOLEAN,
+      
+      -- モメンタム・流動性
+      avg_trading_value_5d REAL,
+      volume_ratio REAL,
+      trading_value_ratio REAL,
+      rsi REAL,
+      roc REAL,
+      return_5d_pct REAL,
+      return_20d_pct REAL,
+      
+      -- ファンダメンタルズ・決算
+      market_cap REAL,
+      operating_margin_pct REAL,
+      equity_ratio_pct REAL,
+      dividend_yield_pct REAL,
+      revenue_growth_pct REAL,
+      operating_profit_growth_pct REAL,
+      eps_growth_pct REAL,
+      forecast_achievement_pct REAL,
+      
+      earnings_date TEXT,
+      days_since_earnings INTEGER,
+      next_earnings_date_prediction TEXT,
+      remaining_business_days INTEGER,
+      post_earnings_rise_pct REAL,
+      earnings_reaction_pct REAL,
+      drop_from_post_earnings_high_pct REAL,
+      
+      -- Phase 2 additions
+      macd REAL,
+      macd_signal REAL,
+      atr_14 REAL,
+      atr_pct REAL,
+      stop_loss_2atr REAL,
+      stop_loss_3atr REAL,
+      max_drawdown REAL,
+      volatility REAL,
+      per REAL,
+      pbr REAL,
+      psr REAL,
+      roe REAL,
+      roa REAL
     );
   `);
 

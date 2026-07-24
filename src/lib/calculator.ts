@@ -23,6 +23,7 @@ export async function calculateAndPopulateStocks() {
           date,
           adj_close,
           adj_high,
+          adj_low,
           adj_volume,
           turnover,
           LAG(adj_close, 1) OVER (PARTITION BY ticker ORDER BY date ASC) as prev_adj_close,
@@ -40,7 +41,8 @@ export async function calculateAndPopulateStocks() {
       RankedQuotes AS (
         SELECT *,
           MAX(adj_close - prev_adj_close, 0) as gain,
-          ABS(MIN(adj_close - prev_adj_close, 0)) as loss
+          ABS(MIN(adj_close - prev_adj_close, 0)) as loss,
+          (MAX(adj_high, COALESCE(prev_adj_close, adj_high)) - MIN(adj_low, COALESCE(prev_adj_close, adj_low))) as tr
         FROM RankedQuotesRaw
       ),
       LatestFinancialsRaw AS (
@@ -59,6 +61,13 @@ export async function calculateAndPopulateStocks() {
           adj_eps,
           adj_dividend,
           adj_shares_outstanding,
+          ordinary_profit,
+          total_assets,
+          equity,
+          operating_cash_flow,
+          investing_cash_flow,
+          financing_cash_flow,
+          cash_and_equivalents,
           date,
           ROW_NUMBER() OVER(PARTITION BY ticker ORDER BY date DESC) as rn
         FROM financials
@@ -111,7 +120,14 @@ export async function calculateAndPopulateStocks() {
           AVG(CASE WHEN rn <= 5 THEN adj_volume END) as avg_volume_5d,
           AVG(CASE WHEN rn <= 5 THEN turnover END) as avg_turnover_5d,
           AVG(CASE WHEN rn BETWEEN 2 AND 26 THEN adj_volume END) as avg_volume_past_25d,
-          AVG(CASE WHEN rn BETWEEN 2 AND 26 THEN turnover END) as avg_turnover_past_25d
+          AVG(CASE WHEN rn BETWEEN 2 AND 26 THEN turnover END) as avg_turnover_past_25d,
+
+          -- Phase 2 additions
+          AVG(CASE WHEN rn <= 14 THEN tr END) as atr_14,
+          MIN(CASE WHEN rn <= 200 THEN adj_low END) as min_low_200,
+          MAX(CASE WHEN rn <= 200 THEN adj_high END) as max_high_200,
+          AVG(CASE WHEN rn <= 12 THEN adj_close END) as sma_12,
+          AVG(CASE WHEN rn <= 26 THEN adj_close END) as sma_26
 
         FROM RankedQuotes
         GROUP BY ticker
@@ -130,7 +146,10 @@ export async function calculateAndPopulateStocks() {
         volume_ratio, trading_value_ratio,
         long_term_trend, forecast_achievement_pct,
         earnings_date, days_since_earnings, next_earnings_date_prediction, remaining_business_days,
-        post_earnings_rise_pct, earnings_reaction_pct, drop_from_post_earnings_high_pct
+        post_earnings_rise_pct, earnings_reaction_pct, drop_from_post_earnings_high_pct,
+        
+        macd, atr_14, atr_pct, stop_loss_2atr, stop_loss_3atr, max_drawdown,
+        per, pbr, roe, roa
       )
       SELECT 
         m.ticker,
@@ -232,7 +251,21 @@ export async function calculateAndPopulateStocks() {
           SELECT (met.current_price - MAX(dq.adj_high)) / NULLIF(MAX(dq.adj_high), 0) * 100
           FROM daily_quotes dq
           WHERE dq.ticker = fin.ticker AND dq.date >= fin.date
-        ) as drop_from_post_earnings_high_pct
+        ) as drop_from_post_earnings_high_pct,
+        
+        -- Phase 2 Metrics
+        (met.sma_12 - met.sma_26) as macd,
+        met.atr_14 as atr_14,
+        (met.atr_14 / NULLIF(met.current_price, 0) * 100) as atr_pct,
+        (met.current_price - met.atr_14 * 2) as stop_loss_2atr,
+        (met.current_price - met.atr_14 * 3) as stop_loss_3atr,
+        ((met.min_low_200 - met.max_high_200) / NULLIF(met.max_high_200, 0) * 100) as max_drawdown,
+        
+        -- Valuation & Financials
+        (met.current_price / NULLIF(fin.eps, 0)) as per,
+        (met.current_price / NULLIF((fin.equity * 1000000 / fin.shares_outstanding), 0)) as pbr,
+        (fin.profit / NULLIF(fin.equity, 0) * 100) as roe,
+        (fin.profit / NULLIF(fin.total_assets, 0) * 100) as roa
 
       FROM equities_master m
       LEFT JOIN Metrics met ON m.ticker = met.ticker

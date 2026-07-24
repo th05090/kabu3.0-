@@ -337,3 +337,267 @@ a { color: inherit; text-decoration: none; }
 .stock-table tbody tr:hover td {
   background: var(--hover-bg); /* Solid hover background prevents text piercing through sticky cols */
 }
+
+/* Phase 2: Dashboard Bento Box layout (Vanilla CSS Responsive Grid) */
+.dashboard-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  color: #888;
+}
+.dashboard-header a {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s;
+}
+.dashboard-header a:hover {
+  color: #fff;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+  padding-bottom: 2rem;
+}
+
+.bento-card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.bento-card h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  color: var(--foreground);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+
+.card-chart {
+  grid-column: 1 / -1; /* default full width */
+}
+@media (min-width: 1024px) {
+  .card-chart {
+    grid-column: span 2; /* Spans 2 columns on large screens */
+  }
+}
+@media (min-width: 1400px) {
+  .card-chart {
+    grid-column: span 3; /* Spans 3 columns on very large screens */
+  }
+}
+
+.card-full {
+  grid-column: 1 / -1;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0;
+  border-bottom: 1px dashed rgba(255,255,255,0.05);
+}
+.metric-row:last-child {
+  border-bottom: none;
+}
+.metric-label {
+  font-size: 0.85rem;
+  color: #888;
+}
+.metric-value {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #fff;
+}
+.metric-value.mock {
+  color: #555;
+  font-weight: normal;
+}
+
+/* Stock Header Card Specific */
+.stock-basic-info {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: space-between;
+}
+.stock-basic-info h1 {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #fff;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  margin-bottom: 0.25rem;
+}
+.stock-basic-info .ticker {
+  font-size: 1.25rem;
+  color: #888;
+  font-family: monospace;
+}
+.stock-basic-tags {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.stock-tag {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  border: 1px solid;
+}
+.stock-tag.market { background: rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.5); color: #93c5fd; }
+.stock-tag.industry { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.1); color: #ccc; }
+
+.stock-price-display .price {
+  font-size: 2.5rem;
+  font-weight: bold;
+  font-family: monospace;
+  color: #fff;
+}
+.stock-price-display .market-cap {
+  font-size: 0.9rem;
+  color: #888;
+}
+
+/* AI Analyst Report Component Styles */
+.ai-dashboard {
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.4), rgba(15, 23, 42, 0.6));
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.ai-dashboard::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent);
+}
+
+.ai-dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ai-title {
+  font-size: 1.25rem !important;
+  color: #fff !important;
+  border-bottom: none !important;
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ai-badge {
+  background: rgba(34, 197, 94, 0.1);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.ai-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+@media (min-width: 1024px) {
+  .ai-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.ai-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 1.25rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ai-box.comment {
+  grid-column: 1 / -1;
+  background: rgba(168, 85, 247, 0.03);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.ai-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ai-box-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.ai-box-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.ai-box-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+
+.performance-icon { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+.guidance-icon { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.comparison-icon { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.comment-icon { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+
+.ai-text, .ai-list {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+
+.ai-list {
+  padding-left: 1.25rem;
+  margin: 0;
+}
+
+.ai-list li {
+  margin-bottom: 0.5rem;
+}
+.ai-list li:last-child {
+  margin-bottom: 0;
+}
+

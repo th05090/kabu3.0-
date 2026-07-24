@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 
 // DBから返される行の型（実際には不要なものも多いが網羅）
 export type StockRow = {
@@ -168,16 +169,18 @@ export function StockTable({ data }: { data: StockRow[] }) {
             return (
             <tr key={stock.ticker}>
               <td className="sticky-col">
-                <a 
-                  href={`https://finance.yahoo.co.jp/quote/${stock.ticker.slice(0, 4)}.T/chart`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link 
+                  href={`/stocks/${stock.ticker}`}
                   style={{ color: 'var(--primary)', textDecoration: 'underline', fontWeight: 'bold' }}
                 >
                   {stock.ticker.slice(0, 4)}
-                </a>
+                </Link>
               </td>
-              <td className="sticky-col font-bold truncate" style={{ maxWidth: '180px' }} title={stock.name}>{stock.name}</td>
+              <td className="sticky-col font-bold truncate" style={{ maxWidth: '180px' }} title={stock.name}>
+                <Link href={`/stocks/${stock.ticker}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                  {stock.name}
+                </Link>
+              </td>
               <td>{stock.market}</td>
               <td>{stock.industry}</td>
               <td className="text-right font-mono">{fmt(stock.theme_score)}</td>

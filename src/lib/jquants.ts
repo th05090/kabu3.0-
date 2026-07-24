@@ -106,8 +106,8 @@ export async function syncJQuants() {
           
           return {
             sql: `INSERT OR REPLACE INTO financials 
-                  (ticker, date, net_sales, operating_profit, profit, equity_to_asset_ratio, shares_outstanding, forecast_net_sales, forecast_operating_profit, forecast_profit, forecast_dividend, eps, adj_eps, adj_dividend, adj_shares_outstanding) 
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  (ticker, date, net_sales, operating_profit, profit, equity_to_asset_ratio, shares_outstanding, forecast_net_sales, forecast_operating_profit, forecast_profit, forecast_dividend, eps, adj_eps, adj_dividend, adj_shares_outstanding, ordinary_profit, total_assets, equity, operating_cash_flow, investing_cash_flow, financing_cash_flow, cash_and_equivalents) 
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             args: [
               row.Code, row.DiscDate, 
               num(row.Sales) || num(row.NCSales), num(row.OP) || num(row.NCOP), num(row.NP) || num(row.NCNP), 
@@ -115,7 +115,14 @@ export async function syncJQuants() {
               num(row.NxFSales) || num(row.FSales) || num(row.NxFNCSales) || num(row.FNCSales), 
               num(row.NxFOP) || num(row.FOP) || num(row.NxFNCOP) || num(row.FNCOP), 
               num(row.NxFNp) || num(row.FNP) || num(row.NxFNCNP) || num(row.FNCNP), div,
-              eps, eps, div, shares
+              eps, eps, div, shares,
+              num(row.OrdinaryProfit) || num(row.NCOrdinaryProfit),
+              num(row.TotalAssets) || num(row.NCTotalAssets),
+              num(row.Equity) || num(row.NCEquity),
+              num(row.OperatingCF) || num(row.NCOperatingCF),
+              num(row.InvestingCF) || num(row.NCInvestingCF),
+              num(row.FinancingCF) || num(row.NCFinancingCF),
+              num(row.CashEquivalents) || num(row.NCCashEquivalents)
             ]
           };
         });
@@ -177,7 +184,7 @@ export async function syncJQuants() {
           };
         });
 
-        // 過去分をUPDATEするクエリもトランザクションに積む (二重適用防止)
+        // 過去分をUPDATEするクエリもトランザクションに積む
         for (const s of splits) {
           const factor = parseFloat(s.AdjFactor);
           // stock_splitsテーブルに記録し、既に記録済みの場合は何もしない
@@ -187,32 +194,7 @@ export async function syncJQuants() {
             args: [s.Code, s.Date, factor]
           });
           
-          // ここで、直前のINSERT結果を使って条件分岐するのは難しいので、
-          // SQLiteの機能を使って、stock_splitsにINSERTされた時(changes()等)か、
-          // 実用上は Node.js 側でDBに事前に存在確認をしておく方が安全ですが、
-          // バルク処理中なので、daily_quotes側のUPDATEに条件を付けます。
-          // （実のところ、J-QuantsのバルクヒストリカルデータにはすでにAdjustmentCloseが入っているため、
-          // 今回の修正で row.AdjustmentClose を優先するようにしました。
-          // よって、過去分に対する手動の factor 掛け算は、ヒストリカルデータを全同期する今回は不要です。
-          // 日々の差分更新時のみ必要になりますが、今回は一括同期スクリプトとしての役割が強いため、
-          // 誤動作防止のため過去の UPDATE 処理自体をコメントアウトします。）
-          
-          /*
-          transaction.push({
-            sql: \`UPDATE daily_quotes SET 
-                  adj_open = adj_open * ?, 
-                  adj_high = adj_high * ?, 
-                  adj_low = adj_low * ?, 
-                  adj_close = adj_close * ?, 
-                  adj_volume = adj_volume / ? 
-                  WHERE ticker = ? AND date < ?\`,
-            args: [factor, factor, factor, factor, factor, s.Code, s.Date]
-          });
-          */
-          console.log(`[J-Quants] Stock Split Detected: ${s.Code} on ${s.Date} (Factor: ${factor})`);
-        }
-          // 日足の調整
-          /*
+          // 日足の調整 (復活)
           transaction.push({
             sql: `UPDATE daily_quotes SET 
                   adj_open = adj_open * ?, 
@@ -223,20 +205,19 @@ export async function syncJQuants() {
                   WHERE ticker = ? AND date < ?`,
             args: [factor, factor, factor, factor, factor, s.Code, s.Date]
           });
-          */
-          // 財務の調整 (EPS, 1株配当はfactor倍、発行済株式数はfactorで割る)
-          // これも日足同様、いったんコメントアウトして重複適用を防ぎます
-          /*
+          
+          // 財務の調整 (復活)
           transaction.push({
-            sql: \`UPDATE financials SET 
+            sql: `UPDATE financials SET 
                   adj_eps = adj_eps * ?, 
                   adj_dividend = adj_dividend * ?, 
                   adj_shares_outstanding = adj_shares_outstanding / ? 
-                  WHERE ticker = ? AND date < ?\`,
+                  WHERE ticker = ? AND date < ?`,
             args: [factor, factor, factor, s.Code, s.Date]
           });
-          */
-        // Stray brace removed here
+          
+          console.log(`[J-Quants] Stock Split Detected & Applied: ${s.Code} on ${s.Date} (Factor: ${factor})`);
+        }
 
         await db.batch(transaction, 'write');
         batch = [];
