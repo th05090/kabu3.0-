@@ -67,6 +67,13 @@ APIから取得した元データを蓄積し、計算ロジックのベース�
 - `adj_eps` (REAL): 株式分割調整後EPS
 - `adj_dividend` (REAL): 株式分割調整後配当
 - `adj_shares_outstanding` (REAL): 株式分割調整後発行済株式数
+- `ordinary_profit` (REAL): 経常利益
+- `total_assets` (REAL): 総資産
+- `equity` (REAL): 自己資本
+- `operating_cash_flow` (REAL): 営業CF
+- `investing_cash_flow` (REAL): 投資CF
+- `financing_cash_flow` (REAL): 財務CF
+- `cash_and_equivalents` (REAL): 現金及び預金
 - PK: `(ticker, date)`
 
 ### `stocks` テーブル (Phase 1: Screener用高速スナップショット)
@@ -127,7 +134,24 @@ APIから取得した元データを蓄積し、計算ロジックのベース�
 - `return_5d_pct` (REAL): 5日騰落率
 - `return_20d_pct` (REAL): 20日騰落率
 - `is_high_20d_update` (BOOLEAN): 20日高値更新
-- `is_high_60d_update` (BOOLEAN): 60日高値更新
+#### リスク・ボラティリティ指標
+- `atr_14` (REAL): 14日ATR
+- `atr_pct` (REAL): ATR/株価 (%)
+- `stop_loss_2atr` (REAL): 2ATR損切ライン
+- `stop_loss_3atr` (REAL): 3ATR損切ライン
+- `max_drawdown` (REAL): 最大ドローダウン
+- `volatility` (REAL): ボラティリティ
+
+#### バリュエーション指標
+- `per` (REAL): 株価収益率 (PER)
+- `pbr` (REAL): 株価純資産倍率 (PBR)
+- `psr` (REAL): 株価売上高倍率 (PSR)
+- `roe` (REAL): 自己資本利益率 (ROE)
+- `roa` (REAL): 総資産利益率 (ROA)
+
+#### テクニカル分析追加
+- `macd` (REAL): MACD
+- `macd_signal` (REAL): MACDシグナル
 
 ## 5. TypeScript型定義 (Core Types)
 *(※機能追加時に随時追記・更新する)*
@@ -138,3 +162,34 @@ APIから取得した元データを蓄積し、計算ロジックのベース�
 
 ## 7. API仕様
 *(※機能追加時に随時追記・更新する)*
+
+## 8. アーキテクチャ・設計ガイドライン
+
+### 8.1 データパイプライン（バッチ処理）の設計
+- **履歴蓄積・再計算**: J-Quants API等からの履歴蓄積、および `stocks` テーブルの再計算処理は、フロントエンドやNext.jsのAPI Routesからは切り離し、**別プロセスのNode.jsスクリプトとして独立**させること（例: `src/scripts/run_sync.ts` などに配置し、Node/Cronで実行する）。
+- **AI・RAGパイプライン (Gemma3 + Docling)**: 決算PDFからハルシネーションのない抽出を行うため、`src/scripts/analyze_stock.ts` にて以下の処理を行う。
+  1. `docling` (Python/CUDA環境) を用いたPDFの高精度Markdown化 (`src/scripts/pdf_to_md_docling.py`)
+  2. 前回・今回資料のコンテキスト分離 (時期混同によるハルシネーションの防止)
+  3. ローカルの `Gemma3:12B` によるJSON厳格抽出。SSOTプロンプト仕様として以下の**7つの厳守事項**を適用する：
+     - ① 改行の絶対禁止（JSONパースエラー防止）
+     - ② 箇条書きは「・」で1行にまとめる
+     - ③ 推測の禁止（記載がない場合は「記載なし」）
+     - ④ 1行＝短文ではなく、文字数を惜しまない詳細な長文の要求
+     - ⑤ 抽象的表現の禁止（具体的な数値の引用必須）
+     - ⑥ 単位の勝手な変換禁止（百万円単位のままなど）
+     - ⑦ AI自身による足し算・引き算など計算の完全禁止
+  4. 抽出データは以下の4軸JSONフォーマットに従う：
+     - `current_performance`: 当期実績の評価（強みと弱みの統合）
+     - `future_guidance`: 次期業績見通し（課題・リスク要因）
+     - `report_comparison`: 前回と今回の定性的なトーン変化の比較（※数値の直接比較・記載は禁止）
+     - `ai_comment`: アナリストとしての総合オピニオン
+- **一時スクリプト**: 一時的な検証や実験用のスクリプトは `scratch/` ディレクトリに配置し、本番のバッチロジックとは明確に分離する。
+
+### 8.2 フロントエンドの状態管理とテーブル描画
+- **状態管理**: 全銘柄スクリーナー等の複雑なフィルタ条件やUI状態の管理には、Zustand、Jotai、またはReact Contextを要件に応じて選定・利用する。過度なProp Drillingを避けること。
+- **テーブル描画 (仮想化)**: 全銘柄（約4,000銘柄）を一度にDOMにレンダリングすると深刻なパフォーマンス低下を引き起こすため、大量データのテーブル描画時には必ず仮想化ライブラリ（例: TanStack Table, React Virtualized 等）の利用を検討・実装すること。
+
+### 8.3 エラーハンドリングとロギング
+- **API取得時のリトライロジック**: J-Quantsなどの外部API連携では「レートリミット（429エラー）」「予期せぬタイムアウト」などが頻発する。フェッチロジックには適切なリトライ処理（Exponential Backoffなど）を組み込むこと。
+- **異常値とゼロ除算のハンドリング**: 金融データ特有の「前期赤字からの成長率（ゼロ除算・マイナス除算）」「上場直後で過去データが存在しない場合」等の計算エラー発生時は、システムクラッシュを避けるため、デフォルト値として `NULL` を設定して適切にハンドリングすること（ダミー値の `0` による隠蔽は禁止）。
+- **株式分割時の異常値**: 株式分割の検知時は必ず過去データの遡及調整（AdjFactor適用）を行い、テクニカル指標（SMA、モメンタム等）の計算に異常値が混入しないように徹底すること。
