@@ -41,9 +41,10 @@ async function parseMarkdownToChunks(markdown: string): Promise<Chunk[]> {
     // Ignore the page delimiters we added
     if (line.trim().startsWith('<!-- PAGE')) continue;
 
-    const h1Match = line.match(/^#\s+(.+)$/);
-    const h2Match = line.match(/^##\s+(.+)$/);
-    const h3Match = line.match(/^###\s+(.+)$/);
+    const cleanLine = line.trim();
+    const h1Match = cleanLine.match(/^#\s+(.+)$/);
+    const h2Match = cleanLine.match(/^##\s+(.+)$/);
+    const h3Match = cleanLine.match(/^###\s+(.+)$/);
 
     if (h1Match) {
       flushChunk();
