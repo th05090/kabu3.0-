@@ -63,6 +63,12 @@ export async function syncJQuants() {
   console.log('--- J-Quants Data Sync Started ---');
 
   try {
+    // 0. 同期履歴テーブルの作成と取得 (差分同期用)
+    await db.execute('CREATE TABLE IF NOT EXISTS sync_history (key TEXT PRIMARY KEY, synced_at TEXT)');
+    const historyRes = await db.execute('SELECT key FROM sync_history');
+    const syncedKeys = new Set(historyRes.rows.map(r => r.key));
+    console.log(`[J-Quants] Found ${syncedKeys.size} previously synced files. Proceeding with incremental sync.`);
+
     // 1. 上場銘柄一覧の取得
     const masterList = await fetchJQuants('/v2/bulk/list?endpoint=equities/master');
     const masterFiles = masterList.data || [];
@@ -84,10 +90,12 @@ export async function syncJQuants() {
 
     // 2. 財務データの取得 (fins/summary)
     const finsList = await fetchJQuants('/v2/bulk/list?endpoint=fins/summary');
-    const finsFiles = (finsList.data || []).filter((f: any) => {
+    let finsFiles = (finsList.data || []).filter((f: any) => {
       return f.Key.includes('/2024/') || f.Key.includes('/2025/') || f.Key.includes('/2026/') || f.Key.includes('/live/');
     });
-    console.log(`[J-Quants] Found ${finsFiles.length} financials files to process since 2024.`);
+    
+    finsFiles = finsFiles.filter((f: any) => !syncedKeys.has(f.Key));
+    console.log(`[J-Quants] Found ${finsFiles.length} NEW financials files to process.`);
     finsFiles.sort((a: any, b: any) => a.Key.localeCompare(b.Key));
 
     for (const file of finsFiles) {
@@ -135,18 +143,22 @@ export async function syncJQuants() {
         if (batch.length >= BATCH_SIZE) await flushBatch();
       });
       await flushBatch();
+      
+      // 同期成功したら履歴に追加
+      await db.execute({
+        sql: 'INSERT INTO sync_history (key, synced_at) VALUES (?, ?)',
+        args: [file.Key, new Date().toISOString()]
+      });
     }
 
     // 3. 日足データの取得 (2024年以降を対象)
     const quotesList = await fetchJQuants('/v2/bulk/list?endpoint=equities/bars/daily');
-    const quoteFiles = (quotesList.data || []).filter((f: any) => {
-      // "equities/bars/daily/historical/2024/..." などの文字列から年を抽出してフィルタ
+    let quoteFiles = (quotesList.data || []).filter((f: any) => {
       return f.Key.includes('/2024/') || f.Key.includes('/2025/') || f.Key.includes('/2026/') || f.Key.includes('/live/');
     });
-
-    console.log(`[J-Quants] Found ${quoteFiles.length} daily quote files to process since 2024.`);
     
-    // 過去から順に処理するため昇順ソート (ファイル名は日付順になっている前提)
+    quoteFiles = quoteFiles.filter((f: any) => !syncedKeys.has(f.Key));
+    console.log(`[J-Quants] Found ${quoteFiles.length} NEW daily quote files to process.`);
     quoteFiles.sort((a: any, b: any) => a.Key.localeCompare(b.Key));
 
     // ローカルSQLiteではバルク挿入が早いが、非同期で1行ずつだと遅いため、バッチ化します
@@ -230,6 +242,12 @@ export async function syncJQuants() {
         }
       });
       await flushBatch(); // 残りをフラッシュ
+      
+      // 同期成功したら履歴に追加
+      await db.execute({
+        sql: 'INSERT INTO sync_history (key, synced_at) VALUES (?, ?)',
+        args: [file.Key, new Date().toISOString()]
+      });
     }
 
     console.log('[J-Quants] Calling metrics calculator...');
