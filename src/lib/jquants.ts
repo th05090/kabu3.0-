@@ -172,8 +172,19 @@ export async function syncJQuants() {
       const flushBatch = async () => {
         if (batch.length === 0) return;
         
-        // 分割検知用
-        const splits = batch.filter(r => r.AdjFactor && parseFloat(r.AdjFactor) !== 1.0 && parseFloat(r.AdjFactor) > 0);
+        const rawSplits = batch.filter(r => r.AdjFactor && parseFloat(r.AdjFactor) !== 1.0 && parseFloat(r.AdjFactor) > 0);
+        
+        // 既に適用済みの分割をフィルタリング (冪等性の担保)
+        const splits = [];
+        for (const s of rawSplits) {
+          const res = await db.execute({
+            sql: 'SELECT 1 FROM stock_splits WHERE ticker = ? AND date = ?',
+            args: [s.Code, s.Date]
+          });
+          if (res.rows.length === 0) {
+            splits.push(s);
+          }
+        }
         
         const transaction = batch.map(row => {
           const open = parseFloat(row.O) || null;

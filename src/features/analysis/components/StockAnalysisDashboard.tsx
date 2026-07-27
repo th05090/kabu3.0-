@@ -1,20 +1,63 @@
-import React from 'react';
+"use client";
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { PriceChart } from './PriceChart';
 import { AIAnalystReport } from './AIAnalystReport';
+import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
 interface Props {
   stock: any;
   quotes: any[];
   financials: any[];
   aiReport?: any;
+  equities?: any;
+  shikiho?: any;
 }
 
-export function StockAnalysisDashboard({ stock, quotes, financials, aiReport }: Props) {
+export function StockAnalysisDashboard({ stock, quotes, financials, aiReport, equities, shikiho }: Props) {
   const fmt = (v: any, p='', s='') => v == null ? '-' : `${p}${Number(v).toLocaleString()}${s}`;
   
   // Use passed aiReport if available
   const aiData = aiReport || null;
+
+  // Local state for optimistic updates
+  const [summary, setSummary] = useState(equities?.summary || '');
+  const [gicsInfo, setGicsInfo] = useState(equities?.gics_sub_industry_id ? GICS_DICTIONARY[equities.gics_sub_industry_id] : null);
+  
+  // Edit mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleEditClick = () => {
+    setEditText(summary);
+    setIsEditing(true);
+  };
+
+  const handleSaveClick = async () => {
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/stocks/${stock.ticker}/summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ summary: editText })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSummary(editText);
+        if (data.newGicsId && GICS_DICTIONARY[data.newGicsId]) {
+          setGicsInfo(GICS_DICTIONARY[data.newGicsId]);
+        }
+        setIsEditing(false);
+      } else {
+        alert("保存に失敗しました: " + data.error);
+      }
+    } catch (e) {
+      alert("通信エラーが発生しました");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="dashboard-container">
@@ -39,9 +82,65 @@ export function StockAnalysisDashboard({ stock, quotes, financials, aiReport }: 
                 <span className="stock-tag market">{stock.market}</span>
                 <span className="stock-tag industry">{stock.industry}</span>
               </div>
+              
+              <div style={{ marginTop: '1rem', position: 'relative' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <h3 style={{ fontSize: '1rem', margin: 0, color: 'var(--foreground)' }}>事業要約</h3>
+                  {!isEditing && (
+                    <button 
+                      onClick={handleEditClick}
+                      style={{ background: 'none', border: '1px solid var(--border)', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--foreground)' }}
+                    >
+                      ✎ 編集
+                    </button>
+                  )}
+                </div>
+                
+                {isEditing ? (
+                  <div>
+                    <textarea 
+                      value={editText}
+                      onChange={e => setEditText(e.target.value)}
+                      disabled={isSaving}
+                      style={{ 
+                        width: '100%', 
+                        minHeight: '80px', 
+                        padding: '8px', 
+                        borderRadius: '4px',
+                        border: '1px solid var(--border)',
+                        backgroundColor: 'var(--background)',
+                        color: 'var(--foreground)',
+                        fontSize: '0.9rem',
+                        lineHeight: '1.5',
+                        resize: 'vertical'
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
+                      <button 
+                        onClick={() => setIsEditing(false)}
+                        disabled={isSaving}
+                        style={{ padding: '4px 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', cursor: 'pointer', color: 'var(--foreground)' }}
+                      >
+                        キャンセル
+                      </button>
+                      <button 
+                        onClick={handleSaveClick}
+                        disabled={isSaving}
+                        style={{ padding: '4px 12px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        {isSaving ? '保存中...' : '保存'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.9rem', color: '#888', lineHeight: '1.5' }}>
+                    {summary || '要約情報がありません'}
+                  </div>
+                )}
+              </div>
             </div>
             
-            <div className="stock-price-display">
+            <div className="stock-price-display" style={{ marginTop: '1rem' }}>
               <div className="price">
                 ¥{Number(stock.current_price).toLocaleString()}
               </div>
@@ -57,6 +156,57 @@ export function StockAnalysisDashboard({ stock, quotes, financials, aiReport }: 
           <h2>株価チャート (日足)</h2>
           <div style={{ flex: 1, marginTop: '-0.5rem' }}>
             <PriceChart data={quotes} />
+          </div>
+        </div>
+
+        {/* 分類情報 */}
+        <div className="bento-card">
+          <h2>分類情報</h2>
+          <div className="metric-row">
+            <span className="metric-label">大分類 (主幹テーマ)</span>
+            <span className="metric-value" style={{ color: 'var(--primary)' }}>{gicsInfo?.sector_name || equities?.theme || '未分類'}</span>
+          </div>
+          <div className="metric-row">
+            <span className="metric-label">中分類</span>
+            <span className="metric-value">{gicsInfo?.industry_group_name || '-'}</span>
+          </div>
+          <div className="metric-row">
+            <span className="metric-label">小分類</span>
+            <span className="metric-value">{gicsInfo?.industry_name || '-'}</span>
+          </div>
+          <div className="metric-row">
+            <span className="metric-label">細分類</span>
+            <span className="metric-value" style={{ fontSize: '0.9rem', textAlign: 'right' }}>{gicsInfo?.sub_industry_name || '-'}</span>
+          </div>
+        </div>
+
+        {/* テーマ情報 */}
+        <div className="bento-card">
+          <h2>テーマ情報</h2>
+          <div>
+            <span className="metric-label" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#888' }}>機能的価値 (四季報キーワード)</span>
+            <div style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
+              {shikiho?.index_keywords ? shikiho.index_keywords.split(',').map((kw: string, i: number) => (
+                <span key={i} style={{ 
+                  display: 'inline-block', 
+                  padding: '4px 8px', 
+                  margin: '0 6px 6px 0', 
+                  backgroundColor: 'var(--hover-bg)', 
+                  borderRadius: '4px', 
+                  border: '1px solid var(--border)',
+                  color: 'var(--foreground)'
+                }}>
+                  {kw.trim()}
+                </span>
+              )) : '-'}
+            </div>
+            
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed var(--border)' }}>
+              <span className="metric-label" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#888' }}>四季報 事業概要</span>
+              <div style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', lineHeight: '1.5' }}>
+                {shikiho?.index_summary || 'データなし'}
+              </div>
+            </div>
           </div>
         </div>
 

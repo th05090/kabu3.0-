@@ -31,6 +31,20 @@ export default async function StockAnalysisPage({ params }: PageProps) {
 
   const stock = stockResult.rows[0];
 
+  // Fetch equities_master (summary, theme, gics_sub_industry_id)
+  const equitiesResult = await db.execute({
+    sql: 'SELECT summary, theme, gics_sub_industry_id FROM equities_master WHERE ticker = ?',
+    args: [ticker],
+  });
+  const equities = equitiesResult.rows.length > 0 ? equitiesResult.rows[0] : null;
+
+  // Fetch shikiho_profiles (index_summary, index_keywords)
+  const shikihoResult = await db.execute({
+    sql: 'SELECT index_summary, index_keywords FROM shikiho_profiles WHERE ticker = ? OR ticker = ?',
+    args: [ticker, ticker.substring(0, 4)],
+  });
+  const shikiho = shikihoResult.rows.length > 0 ? shikihoResult.rows[0] : null;
+
   // 2. Fetch daily quotes for chart (ORDER BY date ASC is CRITICAL for lightweight-charts)
   const quotesResult = await db.execute({
     sql: 'SELECT date, close, adj_close, adj_open, adj_high, adj_low, adj_volume FROM daily_quotes WHERE ticker = ? ORDER BY date ASC',
@@ -55,6 +69,8 @@ export default async function StockAnalysisPage({ params }: PageProps) {
   const stockData = mapRow(stock);
   const quotesData = quotesResult.rows.map(mapRow);
   const financialsData = financialsResult.rows.map(mapRow);
+  const equitiesData = equities ? mapRow(equities) : null;
+  const shikihoData = shikiho ? mapRow(shikiho) : null;
 
   // 4. Fetch AI Report if exists
   let aiReportData = null;
@@ -83,6 +99,8 @@ export default async function StockAnalysisPage({ params }: PageProps) {
         quotes={quotesData} 
         financials={financialsData}
         aiReport={aiReportData}
+        equities={equitiesData}
+        shikiho={shikihoData}
       />
     </div>
   );

@@ -31,20 +31,20 @@ function formatJapaneseCurrency(text: string): string {
     if (isNaN(num)) return match;
     
     // 百万円単位の数値を円に直す ( * 1,000,000)
-    let yen = BigInt(num) * 1000000n;
+    let yen = BigInt(num) * BigInt(1000000);
     
-    const cho = yen / 1000000000000n;
-    yen %= 1000000000000n;
+    const cho = yen / BigInt(1000000000000);
+    yen %= BigInt(1000000000000);
     
-    const oku = yen / 100000000n;
-    yen %= 100000000n;
+    const oku = yen / BigInt(100000000);
+    yen %= BigInt(100000000);
     
-    const man = yen / 10000n;
+    const man = yen / BigInt(10000);
     
     let res = '';
-    if (cho > 0n) res += `${cho}兆`;
-    if (oku > 0n) res += `${oku}億`;
-    if (man > 0n) res += `${man}万`;
+    if (cho > BigInt(0)) res += `${cho}兆`;
+    if (oku > BigInt(0)) res += `${oku}億`;
+    if (man > BigInt(0)) res += `${man}万`;
     if (res === '') return '0円';
     return res + '円';
   });
