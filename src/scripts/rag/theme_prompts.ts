@@ -8,7 +8,6 @@ export async function askLLM(prompt: string, expectJson: boolean = false): Promi
       model: "gemma3:12b",
       prompt: prompt,
       stream: false,
-      format: expectJson ? "json" : undefined,
       options: { temperature: 0.1 }
     })
   });
@@ -19,17 +18,24 @@ export async function askLLM(prompt: string, expectJson: boolean = false): Promi
   return jsonRes.response.trim();
 }
 
-export const pass1PromptTemplate = (pass1Text: string) => `あなたはデータ抽出アシスタントです。以下の決算書のテキスト（主に表）から、各報告セグメントの名称と売上高を抽出してください。
+export const pass1PromptTemplate = (pass1Text: string) => `以下の決算書のテキストから、指定のデータを抽出してください。
+
+【テキスト開始】
+${pass1Text}
+【テキスト終了】
+
+【タスク】
+上記のテキストから、「各報告セグメントの名称」と「そのセグメントの売上高」を抽出してください。
+
 【厳守事項】
 1. 「計」「合計」「調整額」「全社」「内部売上高」「利益」などの計算用の行は絶対に除外してください。
-2. 出力は以下のJSON配列のみとし、マークダウンのコードブロックで囲まないでください。
+2. セグメントごとのデータのみを抽出してください。全体の業績（連結売上高など）は不要です。
+3. 出力は以下のJSON配列のみとし、前後にマークダウンや説明文を一切含めないでください。純粋なJSON配列のみを出力してください。
 
 [
-  { "segment": "セグメント名", "revenue": "売上高の文字列" }
-]
-
-【テキスト】
-${pass1Text}`;
+  { "segment": "セグメントA", "revenue": "100" },
+  { "segment": "セグメントB", "revenue": "50" }
+]`;
 
 export const pass2PromptTemplate = (segmentNames: string[], pass2Text: string) => `あなたはデータ抽出アシスタントです。以下のテキストから、指定された各セグメントの事業内容（具体的な製品名、サービス名、対象顧客など）を抽出してください。
 テキストに記載がない場合は「記載なし」としてください。

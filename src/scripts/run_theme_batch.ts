@@ -14,6 +14,7 @@ async function main() {
   try {
     await db.execute("ALTER TABLE equities_master ADD COLUMN theme TEXT");
     await db.execute("ALTER TABLE equities_master ADD COLUMN summary TEXT");
+    await db.execute("ALTER TABLE equities_master ADD COLUMN main_segment TEXT");
   } catch (e) {
     // Column might already exist, ignore
   }
@@ -35,14 +36,15 @@ async function main() {
   // Get tickers that don't have a summary yet (Exclude ETFs and REITs by name)
   const targetsResult = await db.execute(`
     SELECT ticker, name FROM equities_master 
-    WHERE summary IS NULL 
+    WHERE sub_segments IS NULL 
       AND name NOT LIKE '%ETF%'
-      AND name NOT LIKE '%ファンド%'
-      AND name NOT LIKE '%インデックス%'
-      AND name NOT LIKE '%ブル%'
-      AND name NOT LIKE '%ベア%'
-      AND name NOT LIKE '%投信%'
+      AND name NOT LIKE '%ETN%'
+      AND name NOT LIKE '%REIT%'
+      AND name NOT LIKE '%リート%'
+      AND name NOT LIKE '%ＥＴＦ%'
       AND name NOT LIKE '%投資法人%'
+      AND name NOT LIKE '%ファンド%'
+    ORDER BY ticker ASC
   `);
 
   const targets = targetsResult.rows;
@@ -60,12 +62,12 @@ async function main() {
       const embResTable = await fetch(EMBED_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "bge-m3", prompt: "報告セグメント 売上高 利益 金額 表" })
+        body: JSON.stringify({ model: "bge-m3", prompt: "報告セグメント情報 事業セグメント別売上高" })
       }).then(r => r.json());
 
       const searchResTable = await qdrant.search("earnings_reports", {
         vector: embResTable.embedding,
-        limit: 2,
+        limit: 5,
         filter: { must: [{ key: "ticker", match: { value: ticker5 } }] },
         with_payload: true
       });
@@ -74,7 +76,14 @@ async function main() {
       if (!pass1Text.trim()) pass1Text = "申し訳ありませんが、テキストが提供されていません。";
 
       let llmText1 = await askLLM(pass1PromptTemplate(pass1Text), true);
-      llmText1 = llmText1.replace(/^```(json)?/, "").replace(/```$/, "").trim();
+      console.log("Raw LLM Text:\n" + llmText1);
+      
+      const arrayMatch = llmText1.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      if (arrayMatch) {
+        llmText1 = arrayMatch[0];
+      } else {
+        llmText1 = llmText1.replace(/```json/g, "").replace(/```/g, "").trim();
+      }
       
       let segmentsData = [];
       try {
@@ -87,6 +96,8 @@ async function main() {
       const segmentNames = segmentsData.map((s: any) => s.segment).filter((n: string) => n && n.trim() !== "");
       
       let summary = "";
+      let mainSegmentJson = "";
+  let subSegmentsJson = "";
       
       const shikihoTicker = ticker5.substring(0, 4);
       const shikihoRes = await db.execute({
@@ -126,6 +137,7 @@ async function main() {
 
         let finalOutput = await askLLM(unifiedPromptTemplate(companyName, ticker5, indexSummary, indexKeywords, earningsText), false);
         summary = finalOutput.replace(/^事業要約[：:]\s*/, "").trim();
+        // If fallback occurs, there is no mainSegmentJson
       } else {
         // Pass 2: 事業内容の深掘り
         const embResText = await fetch(EMBED_URL, {
@@ -168,21 +180,44 @@ async function main() {
           const revValueMax = parseInt(String(maxSegment.revenue).replace(/[^0-9]/g, "")) || 0;
           if (revValueS > revValueMax) maxSegment = s;
         }
-        const otherSegments = mergedSegments.filter((s: any) => s.segment !== maxSegment.segment);
+        let otherSegments = mergedSegments.filter((s: any) => s.segment !== maxSegment.segment);
+        otherSegments.sort((a: any, b: any) => {
+          const revA = parseInt(String(a.revenue).replace(/[^0-9]/g, "")) || 0;
+          const revB = parseInt(String(b.revenue).replace(/[^0-9]/g, "")) || 0;
+          return revB - revA;
+        });
+        
+        // Keep up to 2 sub segments
+        otherSegments = otherSegments.slice(0, 2);
 
         let finalOutput = await askLLM(step2PromptTemplate(companyName, ticker5, refInfo, maxSegment, otherSegments), false);
         summary = finalOutput.replace(/^事業要約[：:]\s*/, "").trim();
+        mainSegmentJson = JSON.stringify(maxSegment);
+        subSegmentsJson = JSON.stringify(otherSegments);
       }
 
       console.log(`=> Summary: ${summary}`);
 
       if (summary) {
         await db.execute({
-          sql: "UPDATE equities_master SET summary = ? WHERE ticker = ?",
-          args: [summary, ticker5]
+          sql: "UPDATE equities_master SET summary = ?, main_segment = ?, sub_segments = ? WHERE ticker = ?",
+          args: [summary, mainSegmentJson || null, subSegmentsJson || null, ticker5]
         });
 
-        const qdrantText = `【事業要約】\n${summary}\n\n【機能的価値キーワード】\n${indexKeywords}`;
+        let mainSegmentText = "";
+        let subSegmentText = "";
+        try {
+          if (mainSegmentJson) {
+            const m = JSON.parse(mainSegmentJson);
+            mainSegmentText = `セグメント名: ${m.segment}\n説明: ${m.description}`;
+          }
+          if (subSegmentsJson) {
+            const subs = JSON.parse(subSegmentsJson);
+            subSegmentText = subs.map((s: any) => `セグメント名: ${s.segment}\n説明: ${s.description}`).join("\n---\n");
+          }
+        } catch (e) {}
+
+        const qdrantText = `【事業要約】\n${summary}\n\n【機能的価値キーワード】\n${indexKeywords}\n\n【メイン事業】\n${mainSegmentText}\n\n【サブ事業】\n${subSegmentText}`;
         const embedRes = await fetch(EMBED_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { QdrantClient } from "@qdrant/js-client-rest";
+import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
 const EMBED_URL = "http://localhost:11434/api/embeddings";
 const QDRANT_URL = "http://localhost:6333";
@@ -17,31 +18,34 @@ export async function POST(
   { params }: { params: Promise<{ ticker: string }> }
 ) {
   try {
-    const { summary } = await request.json();
+    const body = await request.json();
     const { ticker } = await params;
+
+    // Fetch existing values first
+    const existingRes = await db.execute({
+      sql: 'SELECT summary, theme_keywords FROM equities_master WHERE ticker = ?',
+      args: [ticker]
+    });
+    
+    if (existingRes.rows.length === 0) {
+      return NextResponse.json({ error: 'Ticker not found' }, { status: 404 });
+    }
+
+    const summary = body.summary !== undefined ? body.summary : existingRes.rows[0].summary;
+    const themeKeywords = body.theme_keywords !== undefined ? body.theme_keywords : existingRes.rows[0].theme_keywords;
 
     if (!summary || typeof summary !== 'string') {
       return NextResponse.json({ error: 'Valid summary text is required' }, { status: 400 });
     }
 
-    // 1. Update equities_master.summary
+    // 1. Update equities_master
     await db.execute({
-      sql: 'UPDATE equities_master SET summary = ? WHERE ticker = ?',
-      args: [summary, ticker],
+      sql: 'UPDATE equities_master SET summary = ?, theme_keywords = ? WHERE ticker = ?',
+      args: [summary, themeKeywords, ticker],
     });
-
-    // 2. Fetch Shikiho keywords for embedding context
-    const shikihoRes = await db.execute({
-      sql: 'SELECT index_keywords FROM shikiho_profiles WHERE ticker = ? OR ticker = ?',
-      args: [ticker, ticker.substring(0, 4)],
-    });
-    
-    let indexKeywords = "";
-    if (shikihoRes.rows.length > 0) {
-      indexKeywords = String(shikihoRes.rows[0].index_keywords);
-    }
 
     // 3. Re-embed the text
+    const indexKeywords = themeKeywords || "";
     const qdrantText = `【事業要約】\n${summary}\n\n【機能的価値キーワード】\n${indexKeywords}`;
     const embedRes = await fetch(EMBED_URL, {
       method: "POST",
@@ -59,15 +63,20 @@ export async function POST(
     });
 
     let newGicsId = null;
+    let newGicsScore = null;
+    let newTheme = null;
     if (searchRes.length > 0 && searchRes[0].payload) {
       newGicsId = String(searchRes[0].payload.sub_industry_id);
+      newGicsScore = searchRes[0].score;
+      if (GICS_DICTIONARY[newGicsId]) {
+        newTheme = GICS_DICTIONARY[newGicsId].sector_name;
+      }
     }
 
     if (newGicsId) {
-      // Update GICS classification in database
       await db.execute({
-        sql: 'UPDATE equities_master SET gics_sub_industry_id = ? WHERE ticker = ?',
-        args: [newGicsId, ticker],
+        sql: 'UPDATE equities_master SET gics_sub_industry_id = ?, gics_similarity_score = ?, theme = ? WHERE ticker = ?',
+        args: [newGicsId, newGicsScore, newTheme, ticker],
       });
     }
 

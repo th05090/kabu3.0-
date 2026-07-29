@@ -22,15 +22,18 @@ export function StockAnalysisDashboard({ stock, quotes, financials, aiReport, eq
 
   // Local state for optimistic updates
   const [summary, setSummary] = useState(equities?.summary || '');
+  const [themeKeywords, setThemeKeywords] = useState(equities?.theme_keywords || shikiho?.index_keywords || '');
   const [gicsInfo, setGicsInfo] = useState(equities?.gics_sub_industry_id ? GICS_DICTIONARY[equities.gics_sub_industry_id] : null);
   
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState('');
+  const [editKeywords, setEditKeywords] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   const handleEditClick = () => {
     setEditText(summary);
+    setEditKeywords(themeKeywords);
     setIsEditing(true);
   };
 
@@ -40,11 +43,12 @@ export function StockAnalysisDashboard({ stock, quotes, financials, aiReport, eq
       const res = await fetch(`/api/stocks/${stock.ticker}/summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ summary: editText })
+        body: JSON.stringify({ summary: editText, theme_keywords: editKeywords })
       });
       const data = await res.json();
       if (res.ok) {
         setSummary(editText);
+        setThemeKeywords(editKeywords);
         if (data.newGicsId && GICS_DICTIONARY[data.newGicsId]) {
           setGicsInfo(GICS_DICTIONARY[data.newGicsId]);
         }
@@ -102,6 +106,7 @@ export function StockAnalysisDashboard({ stock, quotes, financials, aiReport, eq
                       value={editText}
                       onChange={e => setEditText(e.target.value)}
                       disabled={isSaving}
+                      placeholder="事業要約"
                       style={{ 
                         width: '100%', 
                         minHeight: '80px', 
@@ -112,7 +117,24 @@ export function StockAnalysisDashboard({ stock, quotes, financials, aiReport, eq
                         color: 'var(--foreground)',
                         fontSize: '0.9rem',
                         lineHeight: '1.5',
-                        resize: 'vertical'
+                        resize: 'vertical',
+                        marginBottom: '8px'
+                      }}
+                    />
+                    <input 
+                      type="text"
+                      value={editKeywords}
+                      onChange={e => setEditKeywords(e.target.value)}
+                      disabled={isSaving}
+                      placeholder="テーマキーワード（カンマ区切り）"
+                      style={{ 
+                        width: '100%', 
+                        padding: '8px', 
+                        borderRadius: '4px',
+                        border: '1px solid var(--border)',
+                        backgroundColor: 'var(--background)',
+                        color: 'var(--foreground)',
+                        fontSize: '0.9rem'
                       }}
                     />
                     <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
@@ -184,9 +206,9 @@ export function StockAnalysisDashboard({ stock, quotes, financials, aiReport, eq
         <div className="bento-card">
           <h2>テーマ情報</h2>
           <div>
-            <span className="metric-label" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#888' }}>機能的価値 (四季報キーワード)</span>
+            <span className="metric-label" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#888' }}>機能的価値 キーワード</span>
             <div style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
-              {shikiho?.index_keywords ? shikiho.index_keywords.split(',').map((kw: string, i: number) => (
+              {themeKeywords ? themeKeywords.split(',').map((kw: string, i: number) => (
                 <span key={i} style={{ 
                   display: 'inline-block', 
                   padding: '4px 8px', 

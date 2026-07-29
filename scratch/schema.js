@@ -1,0 +1,1 @@
+import { createClient } from '@libsql/client'; async function run() { const db = createClient({url:'file:local.db'}); const r = await db.execute('SELECT sql FROM sqlite_master WHERE name=\'equities_master\''); console.log(r.rows[0].sql); } run();

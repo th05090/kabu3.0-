@@ -135,6 +135,7 @@ export async function calculateAndPopulateStocks() {
       
       INSERT INTO stocks (
         ticker, name, market, industry, current_price,
+        gics_sub_industry_id,
         sma_25, is_above_sma_25, sma_25_deviation_pct,
         is_above_sma_75, is_above_sma_200, is_golden_cross,
         high_52w, high_52w_deviation, distance_to_high_52w_pct,
@@ -157,6 +158,7 @@ export async function calculateAndPopulateStocks() {
         m.market,
         m.industry,
         met.current_price,
+        m.gics_sub_industry_id,
         
         met.sma_25,
         (met.current_price > met.sma_25) as is_above_sma_25,

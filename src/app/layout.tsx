@@ -23,9 +23,9 @@ export default function RootLayout({
           <aside className="app-sidebar">
             <div className="sidebar-logo">kabu3.0</div>
             <nav className="sidebar-nav">
-              <a href="#" className="nav-item active"><LayoutDashboard size={20} /><span>スクリーナー</span></a>
+              <a href="/" className="nav-item"><LayoutDashboard size={20} /><span>スクリーナー</span></a>
               <a href="#" className="nav-item"><BarChart2 size={20} /><span>個別分析</span></a>
-              <a href="#" className="nav-item"><Lightbulb size={20} /><span>テーマ</span></a>
+              <a href="/themes" className="nav-item active"><Lightbulb size={20} /><span>テーマ</span></a>
               <a href="#" className="nav-item"><Bell size={20} /><span>アラート</span></a>
               <a href="#" className="nav-item"><Briefcase size={20} /><span>ポートフォリオ</span></a>
             </nav>

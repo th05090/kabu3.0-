@@ -3,6 +3,7 @@
 import React from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
 // DBから返される行の型（実際には不要なものも多いが網羅）
 export type StockRow = {
@@ -10,6 +11,7 @@ export type StockRow = {
   name: string;
   market: string;
   industry: string;
+  gics_sub_industry_id?: string;
   theme: string;
   theme_score: number;
   current_price: number;
@@ -120,7 +122,7 @@ export function StockTable({ data }: { data: StockRow[] }) {
             <th className="sticky-col">銘柄コード</th>
             <th className="sticky-col">銘柄名</th>
             <th>市場</th>
-            <th>業種(テーマ)</th>
+            <th>テーマ(GICS細分類)</th>
             <th>テーマ点</th>
             <SortableHeader field="current_price">現在株価</SortableHeader>
             <SortableHeader field="market_cap">時価総額(億)</SortableHeader>
@@ -166,6 +168,10 @@ export function StockTable({ data }: { data: StockRow[] }) {
           {data.map((stock) => {
             const fmt = (v: any, prefix='', suffix='') => v == null ? '-' : `${prefix}${Number(v).toLocaleString()}${suffix}`;
             const cls = (v: any) => v == null ? '' : colorClass(Number(v));
+            
+            const gics = stock.gics_sub_industry_id ? GICS_DICTIONARY[stock.gics_sub_industry_id] : null;
+            const tooltip = gics ? `大分類: ${gics.sector_name}\n中分類: ${gics.industry_group_name}\n小分類: ${gics.industry_name}` : '分類データなし';
+
             return (
             <tr key={stock.ticker}>
               <td className="sticky-col">
@@ -182,7 +188,7 @@ export function StockTable({ data }: { data: StockRow[] }) {
                 </Link>
               </td>
               <td>{stock.market}</td>
-              <td>{stock.industry}</td>
+              <td title={tooltip}>{gics ? gics.sub_industry_name : '-'}</td>
               <td className="text-right font-mono">{fmt(stock.theme_score)}</td>
               <td className="text-right font-mono">{fmt(stock.current_price, '¥')}</td>
               <td className="text-right font-mono">{fmt(stock.market_cap)}</td>

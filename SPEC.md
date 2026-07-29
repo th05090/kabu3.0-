@@ -42,6 +42,9 @@ APIから取得した元データを蓄積し、計算ロジックのベース�
 - `market` (TEXT): 市場区分
 - `industry` (TEXT): 業種 (17業種または33業種)
 - `summary` (TEXT): 抽出・生成された事業要約テキスト (手動補正対応)
+- `theme_keywords` (TEXT): 抽出されたテーマ機能的価値キーワード群
+- `main_segment` (TEXT): LLMが抽出した事業セグメントのうち、最も売上高の大きい主力セグメント(JSON形式)
+- `sub_segments` (TEXT): 主力セグメント以外の展開事業セグメント(JSON配列形式)
 - `gics_sub_industry_id` (TEXT): Qdrantベクトル検索で自動判定されたGICS細分類ID
 - `last_updated` (TEXT): 最終更新日時
 
@@ -83,6 +86,38 @@ APIから取得した元データを蓄積し、計算ロジックのベース�
 - `original_feature` (TEXT): 四季報の「特色」生テキスト
 - `index_summary` (TEXT): LLM(Gemma)で無機質化・構造化された機能的価値の要約
 - `index_keywords` (TEXT): 抽出されたキーワード群
+
+#### `stock_splits` (株式分割履歴)
+- `ticker` (TEXT)
+- `date` (TEXT): 効力発生日
+- `split_ratio` (REAL): 分割比率 (例: 1:3の場合は 3.0)
+- PK: `(ticker, date)`
+
+#### `sync_history` (J-Quants API同期履歴)
+- `id` (INTEGER PK AUTOINCREMENT)
+- `sync_type` (TEXT): 'daily_quotes', 'financials' 等
+- `target_date` (TEXT): 取得対象日
+- `status` (TEXT): 'success', 'error'
+- `synced_at` (TEXT): 実行日時
+
+#### `custom_themes` (マイテーマ基本情報)
+- `id` (TEXT PK): テーマの一意識別子 (UUID等)
+- `name` (TEXT): ユーザーが命名したテーマ名
+- `created_at` (TEXT): 作成日時
+- `updated_at` (TEXT): 更新日時
+
+#### `custom_theme_stocks` (マイテーマ構成銘柄)
+- `theme_id` (TEXT): 所属するマイテーマID
+- `ticker` (TEXT): 構成銘柄コード
+- `added_at` (TEXT): 追加日時
+- `score` (REAL): 検索時に算出された該当テーマへの関連度スコア
+- PK: `(theme_id, ticker)`
+
+#### `equities_fts` (FTS5 高速キーワード検索用仮想テーブル)
+- `ticker` (TEXT)
+- `summary` (TEXT)
+- `theme_keywords` (TEXT)
+- ※ `equities_master` と同期するトリガー (`equities_fts_ai`, `equities_fts_au`, `equities_fts_ad`) により自動更新される。`tokenize='trigram'` により日本語部分一致およびBM25スコア計算に対応。
 
 ### `stocks` テーブル (Phase 1: Screener用高速スナップショット)
 履歴データからテクニカル・ファンダメンタル計算を行い、最新状態のみを保持するテーブル。UI表示に直結。
@@ -172,6 +207,16 @@ APIから取得した元データを蓄積し、計算ロジックのベース�
 - **Next.js App Router (Route Handlers)** を利用してフロントエンド向けのBFF (Backend For Frontend) APIを構築する。
 - RESTful原則に従い、リソース指向のエンドポイント設計とする（例: `GET /api/stocks`, `GET /api/stocks/[ticker]`）。
 - **`POST /api/stocks/[ticker]/summary`**: 個別銘柄の事業要約手動補正用エンドポイント。ユーザーが編集した要約を受け取り、`equities_master` を更新、再度Ollamaでベクトル化してQdrantでGICS分類を再判定し、結果を保存する一連のハイブリッド更新処理を行う。
+- **`GET /api/themes`**: 保存済みのマイテーマ一覧（`custom_themes`）と各テーマの構成銘柄数・トップ3銘柄を取得する。
+- **`POST /api/themes`**: 新規マイテーマを作成する。初期銘柄リストとそのスコア（`custom_theme_stocks`）のバルクインサートを行う。
+- **`DELETE /api/themes/[id]`**: 指定したマイテーマとその構成銘柄を削除する。
+- **`POST /api/themes/bulk-delete`**: 複数のマイテーマ（ID配列）をトランザクション内で一括削除する。
+- **`GET /api/themes/[id]/stocks`**: マイテーマに属する構成銘柄のリスト（基本情報、スコア等）を取得する。ネットワークグラフ描画用データとしても利用される。
+- **`POST /api/themes/[id]/stocks`**: 既存のマイテーマに単一の銘柄を手動で追加する。重複時はスキップ（またはエラーハンドリング）する。
+- **`POST /api/themes/expand-query`**: ユーザー入力の自然言語クエリを、Gemma3モデル（LLM）を用いて関連する周辺キーワード群（カンマ区切り文字列）に拡張・抽出する。
+- **`POST /api/themes/search`**: 自然言語によるテーマ検索。入力クエリと拡張キーワードを用いて、QdrantのDense検索（`bge-m3`ベクトル）とSQLiteのSparse検索（`equities_fts` BM25）を実行し、両者の順位をLocal RRF (Reciprocal Rank Fusion; k=60) アルゴリズムによって融合させ、最終的なハイブリッド検索結果（Top 50）を返す。
+- **`POST /api/batch/reclassify`**: 特定のバッチ処理（業種再分類やテーマの再判定など）をトリガーする。
+- **`POST /api/data-sync/daily`**: J-Quants API等からの日次データ（日足、財務等）の差分取得ジョブを起動するトリガーエンドポイント。
 
 ## 8. アーキテクチャ・設計ガイドライン
 
@@ -199,14 +244,25 @@ APIから取得した元データを蓄積し、計算ロジックのベース�
 ### 8.4 テーマ抽出と動的テーマの設計 (Shikiho & RAG)
 - **ハイブリッド要約パイプライン**: 決算書PDFのRAGだけでは事業の実態が抽象化される問題を防ぐため、以下の2段階プロセスを採用する。
   1. **四季報クレンジング (`run_shikiho_index_batch.ts`)**: 四季報の「特色」テキストから、取引先名や装飾語（ノイズ）をLLMで排除し、純粋な機能的価値（キーワードと要約）として `shikiho_profiles` テーブルへ保存。
-  2. **PDF表データ・事業内容抽出 (`run_theme_batch.ts`)**: Qdrant（決算書PDF）に対して「表」をベクトル検索してセグメントと売上高を特定（Pass 1）。続いて各セグメント名を検索クエリとして事業内容を深堀り（Pass 2）。
+  2. **PDF表データ・事業内容抽出 (`run_theme_batch.ts`)**: Qdrant（決算書PDF）に対して「報告セグメント情報 事業セグメント別売上高」をクエリとしてベクトル検索（`limit: 5`）を実行し、セグメントの名称と売上高を抽出（Pass 1）。抽出エラーを防ぐため、プロンプトの末尾にJSON配列のフォーマットを厳格に指定し、さらに出力から正規表現 (`/\[\s*\{[\s\S]*\}\s*\]/`) を用いてJSON配列部分のみを安全にパースする安全装置を使用。その後、抽出された各セグメント名を検索クエリとして事業内容を深堀り抽出する（Pass 2）。
   3. **最終統合**: PDFからのセグメント情報と、四季報からの無機質な機能的価値をLLMに同時入力し、1文の事業要約と主幹テーマを生成する。
 - **動的テーマ検索 (Semantic Search)**: ユーザーの自由な自然言語（例：「円安メリット」「AIを活用した検査」）による銘柄検索を実現するため、Step 2で生成した「事業要約 ＋ 四季報キーワード」の純度の高いテキストをベクトル化（`bge-m3`）し、Qdrantの `company_profiles` コレクションへ保存する。これによりハルシネーションやノイズのない高度な意味検索が可能になる。
-- **GICS分類マッピング (Vector Classification)**: 主幹テーマの決定において、LLMの推論に依存せず、Qdrant上にGICS（世界産業分類基準）の各分類名と詳細説明ベクトルを格納した `gics_categories` コレクションを作成する。企業のプロフィールベクトルとGICSベクトルのCosine類似度を計算して最も近い分類を特定し、TypeScriptの辞書で上位階層（大・中分類）を逆引きする完全決定論的アーキテクチャを採用する。
+- **GICS分類判定 (Hybrid Classification)**: 主幹テーマの決定において、ベクトル検索の限界（意味は似ているが事業領域が異なるというハルシネーション）を克服するため、以下の「ハイブリッドRRFアーキテクチャ」を採用する。
+  1. **東証33業種フィルター**: 対象銘柄の業種ごとに許容されるGICSセクターをハード制約として事前に定義。
+  2. **Dense Search (Qdrant)**: 企業のプロフィールベクトルとGICSベクトルのCosine類似度を計算。
+  3. **Sparse Search (SQLite FTS5)**: `theme_keywords` と、特定された「セグメント名称（メイン・サブ両方）」を結合したクエリ文字列を用いて、GICSマスタ用のFTS5仮想テーブル `gics_fts` に対して MATCH 検索を実行し、BM25スコアを取得。
+  4. **Local RRF**: Dense/Sparse両方のランクを融合し、フィルターを通過した上位10のGICSカテゴリ候補を抽出する。
+  5. **LLM 2段階リランキング**: 上位10の候補に対し、「事業要約」「機能的価値キーワード」および決算PDFから特定した「メインセグメント（売上高最大のコア事業）」「サブセグメント」の情報をローカルLLM（Ollama Gemma3）に渡し、以下の2段階推論を行って最終的なGICS分類を完全決定する。
+     - **Stage 1 (候補絞り込み)**: 「最優先判定基準：メイン事業セクションの売上規模および事業内容に最も直接合致するテーマを必ず1つ以上含めること」という強い制約を与え、10個の候補から上位3つを選択・JSON配列として出力させる。
+     - **Stage 2 (最終決定)**: 絞り込まれた3つの候補のみを再度プロンプトに組み込み、最も事業内容に一致する1つを厳密に選ばせる（アンカーバイアスの回避と出力の安定化）。
 
 ### 8.5 フロントエンドの状態管理とテーブル描画
 - **状態管理**: 全銘柄スクリーナー等の複雑なフィルタ条件やUI状態の管理には、Zustand、Jotai、またはReact Contextを要件に応じて選定・利用する。過度なProp Drillingを避けること。
 - **テーブル描画 (仮想化)**: 全銘柄（約4,000銘柄）を一度にDOMにレンダリングすると深刻なパフォーマンス低下を引き起こすため、大量データのテーブル描画時には必ず仮想化ライブラリ（例: TanStack Table, React Virtualized 等）の利用を検討・実装すること。
+
+### 8.6 マイテーマおよびハイブリッド検索のUIアーキテクチャ
+- **AI拡張キーワードの編集**: `ThemeSearchTab` では、ユーザーが入力した自然言語からLLMが拡張したキーワード群をテキストボックス（可視化されたキーワードバー）に表示する。ユーザーはこれを手動で削除・追加でき、その編集結果がSparse検索（FTS5 MATCH句）の入力として直接使用される設計となっている。
+- **マイテーマ管理機能**: `CustomThemesTab` において、保存したテーマの一覧表示に加え、「チェックボックスを用いた複数テーマの一括削除」および「ティッカー入力による個別銘柄の手動追加」機能を備え、ポートフォリオ構築の前段階となるテーマ管理を柔軟に行えるUIを提供する。
 
 ### 8.3 エラーハンドリングとロギング
 - **API取得時のリトライロジック**: J-Quantsなどの外部API連携では「レートリミット（429エラー）」「予期せぬタイムアウト」などが頻発する。フェッチロジックには適切なリトライ処理（Exponential Backoffなど）を組み込むこと。

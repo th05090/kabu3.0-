@@ -14,7 +14,12 @@ async function main() {
       name TEXT,
       market TEXT,
       industry TEXT,
-      last_updated TEXT
+      last_updated TEXT,
+      theme TEXT,
+      summary TEXT,
+      gics_sub_industry_id TEXT,
+      gics_similarity_score REAL,
+      theme_keywords TEXT
     );
   `);
 
@@ -137,6 +142,25 @@ async function main() {
       psr REAL,
       roe REAL,
       roa REAL
+    );
+  `);
+
+  // custom_themes (独自テーマの管理)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS custom_themes (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      created_at TEXT
+    );
+  `);
+
+  // custom_theme_stocks (独自テーマ構成銘柄)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS custom_theme_stocks (
+      theme_id TEXT,
+      ticker TEXT,
+      similarity_score REAL,
+      PRIMARY KEY (theme_id, ticker)
     );
   `);
 
