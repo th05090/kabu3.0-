@@ -1,270 +1,513 @@
-# kabu3.0 総合仕様書 (SSOT)
+# kabu3.0 仕様書 (SSOT)
 
-本ドキュメントは `kabu3.0` プロジェクトの唯一の絶対的正解仕様書 (Single Source of Truth) である。
-コードベースのすべての仕様（DBスキーマ・TypeScript型定義・変数抽出元・物理計算式・システム定数・API仕様・コンポーネント構造等）は、ここに機械的かつ全網羅的に記述・維持されなければならない。
+## 1. プロジェクト概要 (System Overview)
 
-## 1. プロジェクト概要
-- **システム名称**: kabu3.0
-- **目的**: 株式投資における全銘柄のスクリーニング、テーマ分析、個別銘柄分析、ポートフォリオ管理、およびバックテストを統合的に行う高度な分析・管理Webアプリケーション。
-- **技術スタック**: Next.js (App Router), React, TypeScript, Vanilla CSS, @libsql/client (SQLite), recharts, lucide-react
+本ドキュメントは、kabu3.0 システムの「単一の情報源 (SSOT: Single Source of Truth)」として機能する公式仕様書です。
+システムの物理構造、データベーススキーマ、AIプロンプトから各計算ロジックに至るまで、すべてのアーキテクチャの仕様を定義します。
 
-## 2. ディレクトリ構造・アーキテクチャ
-- `src/app/` : Next.js App Router (ページルーティング、APIルート)
-- `src/components/` : 汎用UIコンポーネント (Button, Table, Modal, etc.)
-- `src/features/<domain>/` : ドメイン・機能ごとの固有コンポーネント群 (300行を超える前に早期分離)
-  - `screener` : 全銘柄スクリーニング表、フィルタ機能
-  - `analysis` : 個別銘柄分析、チャート、AI決算分析
-  - `theme` : テーマ作成、テーマ判定、各種バブルチャート・ツリーマップ等
-  - `alert` : 買いシグナル管理（決算モメンタム、テクニカル、テーマ）
-  - `portfolio` : 損益トラッキング、撤退ライン管理、キルスイッチ
-  - `backtest` : 株式分割・単元未満株・スリッページを考慮したバックテストエンジン
-- `src/lib/` : 汎用ユーティリティ関数
-- `src/data/docs/` : ユーザー向け解説ドキュメント (KB)
-  - `<system_name>_user_guide.md` の形式で配置。
-- `scratch/` : 一時検証スクリプト用ディレクトリ
-- `Agent.md` : 開発エージェント向けの厳格なルール定義ファイル
+### 1.1 システムの目的
+kabu3.0 は、個人投資家向けに完全にローカル環境で動作する高度な株式分析・管理プラットフォームです。
+一般的なスクリーナー機能に加え、ローカルLLMを用いた決算書のAI解析、ベクトル検索を用いた概念的なテーマ検索、およびポートフォリオのバックテストまでを統合的に実行できるWebアプリケーションを提供します。
 
-## 3. 開発ロードマップ (フェーズ定義)
-- **Phase 1**: 全銘柄スクリーナー（表とフィルタ機能）の構築
-- **Phase 1.5**: 実データ取得・履歴蓄積基盤の構築 (J-Quants API Bulk)
-- **Phase 2**: 個別銘柄分析（指標推移、チャート表示）の構築
-- **Phase 3**: AIテーマ判定およびテーマ分析（ツリーマップ、バブルチャート等）の実装
-- **Phase 4**: 購入関連システム（アラート管理、ポートフォリオ管理、バックテスト）の実装
+### 1.2 主要機能
+1. **全銘柄スクリーナー**: 約4,000銘柄のテクニカル・ファンダメンタル指標に基づく高速なスクリーニング機能。
+2. **AI決算分析 (RAG)**: 企業の決算説明会資料などを自動取得・PDF解析し、事業セグメントや将来見通しをAIアナリストが評価する機能。
+3. **動的テーマ検索**: 「円安メリット」「AIを活用した自動化」など、ユーザーの自由な自然言語（概念）による銘柄検索とハイブリッド検索アルゴリズム（GICS連動）。
+4. **マイテーマ・ポートフォリオ管理**: 抽出した銘柄を任意のテーマとして保存・管理し、パフォーマンスを追跡する機能。
+5. **テーマ内銘柄の分析**: 保存したテーマ内に含まれる構成銘柄の株価情報やファンダメンタル指標をリスト形式で一覧表示し、テーマ単位での比較・分析を行う機能。
+6. **買いアラートの提供**: 事前に定義されたテクニカル指標（パーフェクトオーダー、ゴールデンクロス等）やファンダメンタル条件に合致した銘柄を検知し、売買のタイミングをアラートとして提供する機能。
 
-## 4. データベーススキーマ (SQLite)
+### 1.3 テクノロジースタック
+本システムはプライバシーとコストを重視し、高負荷なAI処理を含めすべてローカル環境内で完結するアーキテクチャを採用しています。
 
-### 履歴保存用テーブル群 (Phase 1.5以降の主軸)
-APIから取得した元データを蓄積し、計算ロジックのベースとなるテーブル。
+- **フロントエンド・BFF (Backend For Frontend)**
+  - Next.js (App Router)
+  - React, TypeScript
+  - Vanilla CSS (UIスタイリング)
+  - Recharts (チャート描画)
+  - Lucide-React (アイコン)
+- **データベース・検索エンジン**
+  - **リレーショナルDB**: SQLite (`@libsql/client`) / FTS5 (全文検索・Sparse Search)
+  - **ベクトルDB**: Qdrant (ローカル稼働 / Dense Search)
+- **AI・自然言語処理**
+  - **ローカルLLM環境**: Ollama
+  - **推論・生成モデル**: `gemma3:12b` (要約、GICS判定、テキスト成形など)
+  - **埋め込みモデル**: `bge-m3` (1024次元 / テーマのベクトル化、RAG検索用)
+- **データ収集・解析 (バッチ処理)**
+  - Node.js (バッチ処理スクリプト)
+  - Playwright (IR Bank等のWebスクレイピング、動的DOM解析)
+  - Docling (Python/CUDA / 決算PDFの高精度Markdownパース)
 
-#### `equities_master` (銘柄基本情報)
-- `ticker` (TEXT PK): 銘柄コード
-- `name` (TEXT): 銘柄名
-- `market` (TEXT): 市場区分
-- `industry` (TEXT): 業種 (17業種または33業種)
-- `summary` (TEXT): 抽出・生成された事業要約テキスト (手動補正対応)
-- `theme_keywords` (TEXT): 抽出されたテーマ機能的価値キーワード群
-- `main_segment` (TEXT): LLMが抽出した事業セグメントのうち、最も売上高の大きい主力セグメント(JSON形式)
-- `sub_segments` (TEXT): 主力セグメント以外の展開事業セグメント(JSON配列形式)
-- `gics_sub_industry_id` (TEXT): Qdrantベクトル検索で自動判定されたGICS細分類ID
-- `last_updated` (TEXT): 最終更新日時
 
-#### `daily_quotes` (日足データ)
-- `ticker` (TEXT)
-- `date` (TEXT)
-- `open` (REAL), `high` (REAL), `low` (REAL), `close` (REAL): 四本値
-- `volume` (REAL): 出来高
-- `turnover` (REAL): 売買代金
-- PK: `(ticker, date)`
+## 2. 画面構成とUI仕様 (UI & Screen Specifications)
 
-#### `financials` (財務情報)
-- `ticker` (TEXT)
-- `date` (TEXT): 開示日など
-- `net_sales` (REAL): 売上高
-- `operating_profit` (REAL): 営業利益
-- `profit` (REAL): 当期純利益
-- `equity_to_asset_ratio` (REAL): 自己資本比率
-- `shares_outstanding` (REAL): 発行済株式数
-- `forecast_net_sales` (REAL): 予想売上高
-- `forecast_operating_profit` (REAL): 予想営業利益
-- `forecast_profit` (REAL): 予想当期純利益
-- `forecast_dividend` (REAL): 予想1株あたり配当
-- `eps` (REAL): 1株あたり利益(EPS)
-- `adj_eps` (REAL): 株式分割調整後EPS
-- `adj_dividend` (REAL): 株式分割調整後配当
-- `adj_shares_outstanding` (REAL): 株式分割調整後発行済株式数
-- `ordinary_profit` (REAL): 経常利益
-- `total_assets` (REAL): 総資産
-- `equity` (REAL): 自己資本
-- `operating_cash_flow` (REAL): 営業CF
-- `investing_cash_flow` (REAL): 投資CF
-- `financing_cash_flow` (REAL): 財務CF
-- `cash_and_equivalents` (REAL): 現金及び預金
-- PK: `(ticker, date)`
+バックエンドのデータパイプラインやAI推論結果をエンドユーザーに提供するための、フロントエンドの主要な画面構成と画面遷移です。
 
-#### `shikiho_profiles` (四季報・事業インデックス)
-- `ticker` (TEXT PK): 銘柄コード
-- `original_feature` (TEXT): 四季報の「特色」生テキスト
-- `index_summary` (TEXT): LLM(Gemma)で無機質化・構造化された機能的価値の要約
-- `index_keywords` (TEXT): 抽出されたキーワード群
+### 2.1 画面遷移図と共通UI (Screen Flow & Common UI)
 
-#### `stock_splits` (株式分割履歴)
-- `ticker` (TEXT)
-- `date` (TEXT): 効力発生日
-- `split_ratio` (REAL): 分割比率 (例: 1:3の場合は 3.0)
-- PK: `(ticker, date)`
+#### 2.1.1 画面遷移図
+```mermaid
+graph TD
+    A[Sidebar (共通)] -->|ナビゲーション| B(メインスクリーナー `page.tsx`)
+    A -->|ナビゲーション| C(テーマディスカバリー `themes/page.tsx`)
+    
+    B -->|ティッカークリック| D(銘柄詳細ページ `stocks/[ticker]/page.tsx`)
+    C -->|マイテーマ/異常検知から| D
+    
+    A -->|データ同期実行| E((Data Sync API))
+```
 
-#### `sync_history` (J-Quants API同期履歴)
-- `id` (INTEGER PK AUTOINCREMENT)
-- `sync_type` (TEXT): 'daily_quotes', 'financials' 等
-- `target_date` (TEXT): 取得対象日
-- `status` (TEXT): 'success', 'error'
-- `synced_at` (TEXT): 実行日時
+#### 2.1.2 サイドバーとデータ同期
+- **サイドバー (`Sidebar.tsx`)**: 全ての画面で左側に固定表示されます。現在のパス(`usePathname`)に応じてアクティブ状態をハイライトします。
+- **データ同期ボタン (`SyncButton.tsx`)**: サイドバー下部に常設されており、クリックすると同期中スピナーが回転し `POST /api/data-sync` を呼び出します。バックグラウンドで重い処理が完了するまでUIはブロックされず、完了時にアラートで通知されます。
 
-#### `custom_themes` (マイテーマ基本情報)
-- `id` (TEXT PK): テーマの一意識別子 (UUID等)
-- `name` (TEXT): ユーザーが命名したテーマ名
-- `created_at` (TEXT): 作成日時
-- `updated_at` (TEXT): 更新日時
+### 2.2 メインスクリーナー (`src/app/page.tsx`)
+アプリケーションのトップページであり、全上場銘柄を俯瞰・フィルタリングするための画面です。
+- **機能**:
+  - `stocks` テーブルに事前計算された約4,000銘柄のテクニカル・ファンダメンタル指標を一覧表示。
+  - **フィルタリング**: 東証業種、GICSセクター、PER、PBR、時価総額、ゴールデンクロス/パーフェクトオーダー発生有無など、複数条件の掛け合わせによる高度な絞り込み機能を備えます。
+  - 仮想化（Virtualization）技術を利用し、数千件のデータをDOM遅延なしで高速スクロール・ソート可能にしています。
 
-#### `custom_theme_stocks` (マイテーマ構成銘柄)
-- `theme_id` (TEXT): 所属するマイテーマID
-- `ticker` (TEXT): 構成銘柄コード
-- `added_at` (TEXT): 追加日時
-- `score` (REAL): 検索時に算出された該当テーマへの関連度スコア
-- PK: `(theme_id, ticker)`
+### 2.2 テーマディスカバリー (`src/app/themes/page.tsx`)
+自然言語による次世代の銘柄検索と、保存されたテーマポートフォリオの可視化を行う画面です。内部的に3つのタブで構成されています（`ThemeDiscoveryLayout`）。
 
-#### `equities_fts` (FTS5 高速キーワード検索用仮想テーブル)
-- `ticker` (TEXT)
-- `summary` (TEXT)
-- `theme_keywords` (TEXT)
-- ※ `equities_master` と同期するトリガー (`equities_fts_ai`, `equities_fts_au`, `equities_fts_ad`) により自動更新される。`tokenize='trigram'` により日本語部分一致およびBM25スコア計算に対応。
+#### 2.2.1 テーマ検索タブ (`ThemeSearchTab`)
+- **機能**: ユーザーが「円安メリット」「AI半導体」といった自然言語を入力すると、バックエンドでLLMが10個の関連キーワードに拡張し、Qdrant(Dense) + SQLite(Sparse) のハイブリッド検索 (RRF) によって最も合致する上位50銘柄を瞬時にリストアップします。
+- **アクション**: 検索結果が良好であれば、任意の名前をつけて「マイテーマ」として保存（DBの `custom_themes` へ保存）できます。
 
-### `stocks` テーブル (Phase 1: Screener用高速スナップショット)
-履歴データからテクニカル・ファンダメンタル計算を行い、最新状態のみを保持するテーブル。UI表示に直結。
+#### 2.2.2 マイテーマ管理タブ (`CustomThemesTab`)
+- **機能**: 保存済みのマイテーマ一覧を表示し、各テーマの構成銘柄とその類似度スコアを確認できます。
+- **可視化 (Network Graph)**: `react-force-graph-2d` を用いて、テーマ内の構成銘柄群をフォース・ディレクテッド・グラフ（ネットワーク図）として視覚的にマッピングします。これにより、テーマの中心的な銘柄（コア）と周辺銘柄（サテライト）の関係性を直感的に把握できます。
 
-#### 銘柄基本情報
-- `ticker` (TEXT PK): 銘柄コード
-- `name` (TEXT): 銘柄名
-- `market` (TEXT): 市場
-- `industry` (TEXT): 業種
-- `theme` (TEXT): テーマ（初期は業種と同値）
-- `theme_score` (REAL): テーマ点
+#### 2.2.3 データクレンジング・異常検知タブ (`DataCleansingTab`)
+- **機能**: バックエンドの `anomaly_detector.ts` によって検知された「東証業種とGICS分類の乖離」や「ベクトル類似度の低い銘柄」をリスト表示します。
+- **アクション**: 画面上から直接「事業要約」や「キーワード」を手動修正し「保存」を押すことで、即座に再エンベディングAPIが走り、正しい分類へと自己修復させることが可能です。また、全銘柄の分類再計算バッチをキックすることもできます。
 
-#### 株価・売買代金
-- `current_price` (REAL): 現在株価
-- `market_cap` (REAL): 時価総額(億円)
-- `avg_trading_value_5d` (REAL): 5日平均売買代金(億円)
-- `volume_ratio` (REAL): 出来高倍率
-- `trading_value_ratio` (REAL): 売買代金倍率
+### 2.3 銘柄詳細ページ (`src/app/stocks/[ticker]/page.tsx`)
+個別銘柄の深い分析情報を集約したダッシュボード画面です（`StockAnalysisDashboard`）。
 
-#### ファンダメンタル指標
-- `revenue_growth_pct` (REAL): 売上成長率% (今期予想 ÷ 前回本決算実績 - 1)
-- `operating_profit_growth_pct` (REAL): 営利成長率% (前期赤字の場合は NULL)
-- `operating_margin_pct` (REAL): 営業利益率%
-- `eps_growth_pct` (REAL): EPS成長率% (前期赤字の場合は NULL)
-- `equity_ratio_pct` (REAL): 自己資本比率%
-- `operating_cf` (REAL): 営業CF
-- `dividend_yield_pct` (REAL): 配当利回り%
+- **AI決算分析レポート**:
+  - RAGパイプラインによって生成された `[ticker]_ai_report.json` を読み込み、【当期業績の事実】【次期見通しの事実】【前回決算との差分】【証券アナリスト視点の総合評価(ai_comment)】の4セクションをプロフェッショナルなレポート形式で表示します。
+- **株価・テクニカルチャート**:
+  - `lightweight-charts` を用いて、`daily_quotes` テーブルからローソク足チャートと出来高をインタラクティブに描画します。
+- **財務推移チャート**:
+  - `recharts` を用いて、`financials` テーブルの時系列データ（売上高、営業利益、EPSなど）を棒グラフ・折れ線グラフで視覚化します。
+- **企業プロファイル情報**:
+  - 四季報からクレンジング抽出された「特徴要約」「関連キーワード」および、AIが判定した「GICSサブ産業カテゴリ」と「テーマ」を表示します。
 
-#### 決算関連
-- `forecast_achievement_pct` (REAL): 予想達成率
-- `earnings_reaction_pct` (REAL): 決算反応%
-- `post_earnings_rise_pct` (REAL): 決算後上昇%
-- `drop_from_post_earnings_high_pct` (REAL): 決算後高値から下落%
-- `earnings_category` (TEXT): 決算区分
-- `earnings_date` (TEXT): 決算日
-- `days_since_earnings` (INTEGER): 決算後日数
-- `next_earnings_date_prediction` (TEXT): 次回決算日予測
-- `remaining_business_days` (INTEGER): 残り営業日
 
-#### テクニカル指標・トレンド
-- `sma_25` (REAL): 25日線
-- `is_above_sma_25` (BOOLEAN): 25日線上かどうか
-- `sma_25_deviation_pct` (REAL): 25日乖離%
-- `is_above_sma_75` (BOOLEAN): 75日線上かどうか
-- `is_above_sma_200` (BOOLEAN): 200日線上かどうか
-- `long_term_trend` (TEXT): 長期トレンド (75日線と200日線が両方上向きか等)
-- `high_52w` (REAL): 52週高値
-- `high_52w_deviation` (REAL): 52週高値乖離
-- `distance_to_high_52w_pct` (REAL): 52週高値距離%
-- `is_high_52w_update` (BOOLEAN): 52週高値更新
+## 3. システムアーキテクチャと設計思想 (Architecture & Design Principles)
 
-#### 追加フィルタ用指標
-- `is_perfect_order` (BOOLEAN): パーフェクトオーダー
-- `is_golden_cross` (BOOLEAN): ゴールデンクロス
-- `rsi` (REAL): RSI
-- `roc` (REAL): ROC
-- `return_5d_pct` (REAL): 5日騰落率
-- `return_20d_pct` (REAL): 20日騰落率
-- `is_high_20d_update` (BOOLEAN): 20日高値更新
-#### リスク・ボラティリティ指標
-- `atr_14` (REAL): 14日ATR
-- `atr_pct` (REAL): ATR/株価 (%)
-- `stop_loss_2atr` (REAL): 2ATR損切ライン
-- `stop_loss_3atr` (REAL): 3ATR損切ライン
-- `max_drawdown` (REAL): 最大ドローダウン
-- `volatility` (REAL): ボラティリティ
+本章では、kabu3.0を構成する主要なデータパイプラインと、それを支える設計思想（利用ファイル、DBテーブル、コア関数など）について定義します。
 
-#### バリュエーション指標
-- `per` (REAL): 株価収益率 (PER)
-- `pbr` (REAL): 株価純資産倍率 (PBR)
-- `psr` (REAL): 株価売上高倍率 (PSR)
-- `roe` (REAL): 自己資本利益率 (ROE)
-- `roa` (REAL): 総資産利益率 (ROA)
+### 3.1 データ同期とバッチ処理パイプライン
+外部API（J-Quants等）からのデータ取得と蓄積は、フロントエンドから分離された専用のNode.jsスクリプトによって実行されます。
 
-#### テクニカル分析追加
-- `macd` (REAL): MACD
-- `macd_signal` (REAL): MACDシグナル
+- **主要ファイル**: `src/scripts/run_sync.ts` (日次同期), `src/scripts/fetch_jquants_bulk.ts` (初期バルク取得)
+- **利用DBテーブル**: `sync_history`, `daily_quotes`, `financials`
+- **設計思想（冪等性と遡及調整）**:
+  - **差分同期**: 毎回全件取得するのではなく、`sync_history` テーブルを活用して未取得のデータのみを効率的にダウンロードします。
+  - **株式分割の自動遡及（AdjFactor）**: 日足データ取得時に株式分割係数（AdjFactor）を検知した場合、新規データだけでなく、データベース内の過去の全株価レコード（`daily_quotes`）に対して自動で係数調整（UPDATE）を実行します。これにより、SMAやMACDなどのテクニカル計算に「分割による窓開け」の異常値が混入することを防ぎます。
 
-## 5. TypeScript型定義 (Core Types)
-*(※機能追加時に随時追記・更新する)*
+### 3.2 RAG・LLM 決算書抽出アーキテクチャ
+決算PDFからの情報抽出において、LLMのハルシネーション（嘘の生成や単位変換ミス）を防ぐため、物理的なパースとベクトル検索を組み合わせたハイブリッド・パイプラインを採用しています。
 
-## 6. システム定数・環境変数
-- **ポート番号**: 3000 (デフォルト)
-- **DBファイルパス**: `file:local.db` (ローカルSQLiteファイル)
+- **主要ファイル**: `src/lib/earnings_processor.ts`, `src/scripts/run_theme_batch.ts`, `src/scripts/analyze_stock_rag.ts`
+- **利用DB/モデル**: Qdrant (`earnings_reports`), Ollama (`gemma3:12b`, `bge-m3`)
+- **処理フロー**:
+  1. **Markdown解析**: `src/scripts/pdf_to_md_docling.py` (Docling) を用いてPDFを高精度なMarkdownに変換し、見出し構造（`#`, `##`）を維持したままチャンク化してQdrantに保存します。
+  2. **ハイブリッド抽出 (Pass 1)**: セグメント損益表を抽出します。
+     - まずMarkdownから表部分を直接切り出すため、行単位の正規表現（`[ \|\-:]+\n`）を使用します（無限ループを防ぐ安全な設計）。
+     - 正規表現での抽出に失敗した場合のみ、Qdrantへフォールバックし、静的クエリ **`"セグメント情報 事業別 報告 計 | 収益"`** を用いてベクトル検索を実行します。
+  3. **深掘り抽出 (Pass 2)**: Pass 1で得た各セグメント名をクエリの軸とし、**`"報告セグメント 概要 事業内容 製品 サービス"`** という静的クエリを組み合わせてQdrantを再度検索し、事業の詳細内容を抽出します。
+  4. **アナリスト清書 (2段階プロンプト)**: 抽出したテキストをLLMに渡す際、「計算や単位変換を行わずに無機質なJSONファクトを抽出する処理（Step 1）」と、「それをプロのアナリスト文章に清書する処理（Step 2）」に完全に分離し、出力の安定性を担保しています。
 
-## 7. API仕様
-- **Next.js App Router (Route Handlers)** を利用してフロントエンド向けのBFF (Backend For Frontend) APIを構築する。
-- RESTful原則に従い、リソース指向のエンドポイント設計とする（例: `GET /api/stocks`, `GET /api/stocks/[ticker]`）。
-- **`POST /api/stocks/[ticker]/summary`**: 個別銘柄の事業要約手動補正用エンドポイント。ユーザーが編集した要約を受け取り、`equities_master` を更新、再度Ollamaでベクトル化してQdrantでGICS分類を再判定し、結果を保存する一連のハイブリッド更新処理を行う。
-- **`GET /api/themes`**: 保存済みのマイテーマ一覧（`custom_themes`）と各テーマの構成銘柄数・トップ3銘柄を取得する。
-- **`POST /api/themes`**: 新規マイテーマを作成する。初期銘柄リストとそのスコア（`custom_theme_stocks`）のバルクインサートを行う。
-- **`DELETE /api/themes/[id]`**: 指定したマイテーマとその構成銘柄を削除する。
-- **`POST /api/themes/bulk-delete`**: 複数のマイテーマ（ID配列）をトランザクション内で一括削除する。
-- **`GET /api/themes/[id]/stocks`**: マイテーマに属する構成銘柄のリスト（基本情報、スコア等）を取得する。ネットワークグラフ描画用データとしても利用される。
-- **`POST /api/themes/[id]/stocks`**: 既存のマイテーマに単一の銘柄を手動で追加する。重複時はスキップ（またはエラーハンドリング）する。
-- **`POST /api/themes/expand-query`**: ユーザー入力の自然言語クエリを、Gemma3モデル（LLM）を用いて関連する周辺キーワード群（カンマ区切り文字列）に拡張・抽出する。
-- **`POST /api/themes/search`**: 自然言語によるテーマ検索。入力クエリと拡張キーワードを用いて、QdrantのDense検索（`bge-m3`ベクトル）とSQLiteのSparse検索（`equities_fts` BM25）を実行し、両者の順位をLocal RRF (Reciprocal Rank Fusion; k=60) アルゴリズムによって融合させ、最終的なハイブリッド検索結果（Top 50）を返す。
-- **`POST /api/batch/reclassify`**: 特定のバッチ処理（業種再分類やテーマの再判定など）をトリガーする。
-- **`POST /api/data-sync/daily`**: J-Quants API等からの日次データ（日足、財務等）の差分取得ジョブを起動するトリガーエンドポイント。
+### 3.3 GICS・動的テーマ ハイブリッド検索アーキテクチャ
+ユーザー入力の自然言語検索や、企業事業のGICS分類を正確に行うため、Dense検索（意味検索）とSparse検索（キーワード一致）を融合させた検索アーキテクチャを採用しています。
 
-## 8. アーキテクチャ・設計ガイドライン
+- **主要ファイル**: `src/scripts/run_gics_classification.ts`, `src/app/api/themes/search/route.ts`
+- **利用DB**: SQLite FTS5 (`gics_fts`, `equities_fts`), Qdrant (`company_profiles`)
+- **処理フロー**:
+  1. **東証33業種ハード制約**: 東証業種ごとに許容されるGICSセクターの定義（`src/data/gics_dictionary.ts`）を事前フィルターとして適用し、IT企業が「食品」に分類されるような大事故を防ぎます。
+  2. **Dense Search**: `bge-m3` によるCosine類似度計算（Qdrantベクトル検索）。
+  3. **Sparse Search**: SQLiteのFTS5仮想テーブルを用いた `MATCH` 句によるBM25スコア検索。
+  4. **Local RRF (Reciprocal Rank Fusion)**: DenseとSparseの順位を `k=60` の定数を用いて融合スコア化し、上位候補（Top 10等）を決定します。
+  5. **LLM リランキング（GICS分類時のみ）**: 抽出されたTop 10のGICS候補に対し、Gemma3を用いて「10個 → 3個（Stage 1）」「3個 → 1個（Stage 2）」と段階的に絞り込むことで、アンカーバイアスを排除した厳密な最終決定を行います。
 
-### 8.1 データパイプライン（バッチ処理）の設計
-- **履歴蓄積・再計算**: J-Quants API等からの履歴蓄積、および `stocks` テーブルの再計算処理は、フロントエンドやNext.jsのAPI Routesからは切り離し、**別プロセスのNode.jsスクリプトとして独立**させること（例: `src/scripts/run_sync.ts` などに配置し、Node/Cronで実行する）。
-  - **差分同期（Incremental Sync）**: J-Quants APIからのバルクデータ取得時は、毎回全件取得するのではなく、ローカルDBに新設した `sync_history` テーブルを活用し、未取得の新規ファイルのみを抽出してダウンロード・パースする差分同期ロジックを実装済み。
-  - **株式分割の遡及調整**: 日足データ等の取得時に `AdjFactor` を検知した場合、新規の差分ファイルからであっても過去の全履歴データ（日足・財務）に対して自動で係数調整（UPDATE）が行われる設計となっている。
-- **AI・RAGパイプライン (Gemma3 + Qdrant ハイブリッド検索)**: 決算PDFからハルシネーションのない抽出を行うため、`src/scripts/analyze_stock_rag.ts` を中心とした以下のRAGアーキテクチャを稼働させる。
-  1. **Markdown解析**: `docling` (Python/CUDA環境) を用いたPDFの高精度Markdown化 (`src/scripts/pdf_to_md_docling.py`)
-  2. **見出しベースのチャンキング (Header-Aware Chunking)**: 表や文脈の分断を防ぐため、Markdownの見出し（`#`, `##`）単位でセクションを切り出し、パンくずリストメタデータ（`[大項目 > 中項目]`）を付与してチャンク化（`src/scripts/rag/chunker.ts`）。
-  3. **Embedding**: `Ollama` 経由で日本語特化の `bge-m3:latest` モデルを使用し、チャンクを1024次元ベクトルに変換（`src/scripts/rag/embedder.ts`）。
-  4. **ベクトルDB (Qdrant) 保存**: ローカル稼働の Qdrant に対して、ベクトルとテキストペイロード（BM25 Full-textインデックス付き）を格納。メタデータとして「対象時期（prev/latest）」「銘柄コード」を付与（`src/scripts/rag/qdrant.ts`）。
-  5. **ハイブリッド検索 (Reciprocal Rank Fusion; RRF)**: Qdrantの Query API などを駆使し、「密ベクトル（Dense）による意味的類似度スコア」と「疎ベクトル/BM25による完全キーワード一致スコア」のランクを融合（RRF）させ、検索漏れとノイズの両方を極限まで排除。
-  6. **2段階パイプライン（Gemma3:12B）による高精度出力**: 12Bモデルの計算・単位変換のハルシネーションを防ぎつつ、プロの文章クオリティを担保するため、抽出と清書を分離した2段階プロセスを実行する。
-     - **Step 1 (ファクト抽出)**: 「無機質なデータ転記ボット」として、単位変換を一切行わずに数値などの事実をJSON配列として抽出する。この際、「金額単位変換の絶対禁止」「推測の排除」を厳守させる。
-     - **TS側での単位パース**: Step 1で抽出されたJSON内の「50,684,952百万円」などの文字列を、正規表現により「50兆6849億5200万円」といった日本語の通貨単位に正確にパース・置換する。その後、Step 2がサボって配列をそのまま出力しないよう、プレーンテキストの形式に変換する。
-     - **Step 2 (アナリスト清書)**: 「プロの証券アナリスト」として、パース済みのファクトデータのみを情報源とし、専門用語を用いた高度な文章に清書する。ここではすべての出力を「プレーンテキストの文字列（String）」として出力するよう強制し、配列やオブジェクトの使用を禁ずる。
-  7. 抽出データは以下の4軸JSONフォーマット（String型）に従う：
-     - `current_performance`: 当期実績の評価（強みと弱みの統合）
-     - `future_guidance`: 次期業績見通し（課題・リスク要因）
-     - `report_comparison`: 前回と今回の定性的なトーン変化の比較（※事前知識の使用禁止）
-     - `ai_comment`: アナリストとしての総合オピニオン（インプリケーションの提示）
-- **一時スクリプト**: 一時的な検証や実験用のスクリプトは `scratch/` ディレクトリに配置し、本番のバッチロジックとは明確に分離する。
+### 3.4 フロントエンド状態管理と仮想化アーキテクチャ
+- **主要ファイル**: `src/features/screener/components/StockTable.tsx`, `src/features/themes/components/ThemeSearchTab.tsx`
+- **設計思想**:
+  - **仮想化（Virtualization）**: 約4,000銘柄を一括表示するスクリーナーにおいて、DOMの膨張によるブラウザのクラッシュを防ぐため、TanStack Table等を用いた仮想化レンダリングを採用し、画面に表示されている数十行のみを描画します。
+  - **動的クエリのUI連動**: テーマ検索時、LLMが自然言語から拡張抽出したキーワード群は「編集可能なタグUI」として画面に表示されます。ユーザーがこれらを削除・追加することで、裏側のFTS5 Sparse検索（MATCH句）の入力文字列が動的に再構築されるアーキテクチャとなっています。
 
-### 8.4 テーマ抽出と動的テーマの設計 (Shikiho & RAG)
-- **ハイブリッド要約パイプライン**: 決算書PDFのRAGだけでは事業の実態が抽象化される問題を防ぐため、以下の2段階プロセスを採用する。
-  1. **四季報クレンジング (`run_shikiho_index_batch.ts`)**: 四季報の「特色」テキストから、取引先名や装飾語（ノイズ）をLLMで排除し、純粋な機能的価値（キーワードと要約）として `shikiho_profiles` テーブルへ保存。
-  2. **PDF表データ・事業内容抽出 (`run_theme_batch.ts`)**: Qdrant（決算書PDF）に対して「報告セグメント情報 事業セグメント別売上高」をクエリとしてベクトル検索（`limit: 5`）を実行し、セグメントの名称と売上高を抽出（Pass 1）。抽出エラーを防ぐため、プロンプトの末尾にJSON配列のフォーマットを厳格に指定し、さらに出力から正規表現 (`/\[\s*\{[\s\S]*\}\s*\]/`) を用いてJSON配列部分のみを安全にパースする安全装置を使用。その後、抽出された各セグメント名を検索クエリとして事業内容を深堀り抽出する（Pass 2）。
-  3. **最終統合**: PDFからのセグメント情報と、四季報からの無機質な機能的価値をLLMに同時入力し、1文の事業要約と主幹テーマを生成する。
-- **動的テーマ検索 (Semantic Search)**: ユーザーの自由な自然言語（例：「円安メリット」「AIを活用した検査」）による銘柄検索を実現するため、Step 2で生成した「事業要約 ＋ 四季報キーワード」の純度の高いテキストをベクトル化（`bge-m3`）し、Qdrantの `company_profiles` コレクションへ保存する。これによりハルシネーションやノイズのない高度な意味検索が可能になる。
-- **GICS分類判定 (Hybrid Classification)**: 主幹テーマの決定において、ベクトル検索の限界（意味は似ているが事業領域が異なるというハルシネーション）を克服するため、以下の「ハイブリッドRRFアーキテクチャ」を採用する。
-  1. **東証33業種フィルター**: 対象銘柄の業種ごとに許容されるGICSセクターをハード制約として事前に定義。
-  2. **Dense Search (Qdrant)**: 企業のプロフィールベクトルとGICSベクトルのCosine類似度を計算。
-  3. **Sparse Search (SQLite FTS5)**: `theme_keywords` と、特定された「セグメント名称（メイン・サブ両方）」を結合したクエリ文字列を用いて、GICSマスタ用のFTS5仮想テーブル `gics_fts` に対して MATCH 検索を実行し、BM25スコアを取得。
-  4. **Local RRF**: Dense/Sparse両方のランクを融合し、フィルターを通過した上位10のGICSカテゴリ候補を抽出する。
-  5. **LLM 2段階リランキング**: 上位10の候補に対し、「事業要約」「機能的価値キーワード」および決算PDFから特定した「メインセグメント（売上高最大のコア事業）」「サブセグメント」の情報をローカルLLM（Ollama Gemma3）に渡し、以下の2段階推論を行って最終的なGICS分類を完全決定する。
-     - **Stage 1 (候補絞り込み)**: 「最優先判定基準：メイン事業セクションの売上規模および事業内容に最も直接合致するテーマを必ず1つ以上含めること」という強い制約を与え、10個の候補から上位3つを選択・JSON配列として出力させる。
-     - **Stage 2 (最終決定)**: 絞り込まれた3つの候補のみを再度プロンプトに組み込み、最も事業内容に一致する1つを厳密に選ばせる（アンカーバイアスの回避と出力の安定化）。
 
-### 8.5 フロントエンドの状態管理とテーブル描画
-- **状態管理**: 全銘柄スクリーナー等の複雑なフィルタ条件やUI状態の管理には、Zustand、Jotai、またはReact Contextを要件に応じて選定・利用する。過度なProp Drillingを避けること。
-- **テーブル描画 (仮想化)**: 全銘柄（約4,000銘柄）を一度にDOMにレンダリングすると深刻なパフォーマンス低下を引き起こすため、大量データのテーブル描画時には必ず仮想化ライブラリ（例: TanStack Table, React Virtualized 等）の利用を検討・実装すること。
+## 4. ディレクトリ・モジュール構成 (Directory Structure)
 
-### 8.6 マイテーマおよびハイブリッド検索のUIアーキテクチャ
-- **AI拡張キーワードの編集**: `ThemeSearchTab` では、ユーザーが入力した自然言語からLLMが拡張したキーワード群をテキストボックス（可視化されたキーワードバー）に表示する。ユーザーはこれを手動で削除・追加でき、その編集結果がSparse検索（FTS5 MATCH句）の入力として直接使用される設計となっている。
-- **マイテーマ管理機能**: `CustomThemesTab` において、保存したテーマの一覧表示に加え、「チェックボックスを用いた複数テーマの一括削除」および「ティッカー入力による個別銘柄の手動追加」機能を備え、ポートフォリオ構築の前段階となるテーマ管理を柔軟に行えるUIを提供する。
+システム全体は、フロントエンド（UI）、BFF（API）、およびバックエンド（バッチ処理）が疎結合となるよう、明確なディレクトリ規則に基づいて構成されています。
 
-### 8.3 エラーハンドリングとロギング
-- **API取得時のリトライロジック**: J-Quantsなどの外部API連携では「レートリミット（429エラー）」「予期せぬタイムアウト」などが頻発する。フェッチロジックには適切なリトライ処理（Exponential Backoffなど）を組み込むこと。
-- **異常値とゼロ除算のハンドリング**: 金融データ特有の「前期赤字からの成長率（ゼロ除算・マイナス除算）」「上場直後で過去データが存在しない場合」等の計算エラー発生時は、システムクラッシュを避けるため、デフォルト値として `NULL` を設定して適切にハンドリングすること（ダミー値の `0` による隠蔽は禁止）。
-- **株式分割時の異常値**: 株式分割の検知時は必ず過去データの遡及調整（AdjFactor適用）を行い、テクニカル指標（SMA、モメンタム等）の計算に異常値が混入しないように徹底すること。また、遡及調整のUPDATE処理は必ず「適用済みの分割記録」を事前チェックし、二重適用を防ぐこと（冪等性の担保）。
+```text
+kabu3.0/
+├── src/
+│   ├── app/                 # Next.js App Router (ページおよびBFFエンドポイント)
+│   │   ├── api/             # RESTful API ルート群 (themes, stocks, data-sync等)
+│   │   └── ...              # 各画面の page.tsx (フロントエンドエントリー)
+│   │
+│   ├── components/          # アプリケーション全体で共通利用するUI部品 (SyncButton等)
+│   │
+│   ├── features/            # ドメイン駆動設計に基づく機能別モジュール群 (Feature Slices)
+│   │   ├── analysis/        # AI決算分析・チャート描画コンポーネント
+│   │   ├── screener/        # 全銘柄スクリーナー、仮想化テーブル描画
+│   │   └── themes/          # テーマ検索UI、マイテーマ管理、ネットワークグラフ
+│   │
+│   ├── lib/                 # アプリケーション全体で共有されるコアビジネスロジック
+│   │   ├── calculator.ts    # テクニカル指標・ファンダメンタル指標の計算エンジン
+│   │   ├── db.ts            # SQLite (libsql) 接続およびクエリラッパー
+│   │   ├── earnings_processor.ts # 決算PDF抽出パイプライン (Docling + RAG)
+│   │   ├── gics.ts          # GICS分類マスタ連携ヘルパー
+│   │   ├── jquants.ts       # J-Quants API クライアント
+│   │   └── anomaly_detector.ts # データ異常値・テーマ乖離検出
+│   │
+│   ├── scripts/             # 非同期で稼働する独立したNode.js/Pythonバッチ処理群
+│   │   ├── rag/             # RAG専用のモジュール群 (chunker, embedder, qdrant, prompts)
+│   │   ├── run_sync.ts      # 日次データ同期・遡及調整ジョブ
+│   │   ├── run_theme_batch.ts # 決算書PDFパースとセグメント抽出バッチ
+│   │   ├── run_gics_classification.ts # GICSハイブリッド判定・再分類バッチ
+│   │   ├── analyze_stock_rag.ts # 決算書からのAIアナリストレポート生成バッチ
+│   │   └── pdf_to_md_docling.py # Doclingを用いたPDF->Markdown高精度変換スクリプト
+│   │
+│   └── data/                # マスターデータおよびドキュメント
+│       ├── gics_dictionary.ts # GICS分類マスタと東証業種ハード制約定義
+│       ├── gics_categories.json # GICSベクトルの静的データ
+│       └── docs/            # ユーザーガイドなどのMarkdownナレッジベース (KB)
+│
+├── data/                    # バッチ処理が生成・管理する物理ファイル群
+│   ├── pdfs/                # IR Bank等から取得した決算説明資料の元PDF
+│   ├── md/                  # Doclingによって解析されたMarkdownファイル
+│   └── pdf_batch_history.json # PDF取得済みの履歴管理（二重取得防止用）
+│
+├── scratch/                 # 動作検証・本番影響のない使い捨て一時スクリプト群
+│
+├── local.db                 # アプリケーションのメインデータベース (SQLite)
+├── .env.local               # システム環境変数（ポートやパス設定など）
+├── Agent.md                 # AI開発エージェント向けの振る舞い・コーディングルール
+└── SPEC.md                  # 本仕様書 (SSOT)
+```
+
+### 4.1 依存関係のルール
+- `src/features/` 内のモジュールは独立性を保ち、他の Feature への直接的な依存（相互インポート）を極力避けます。
+- 共通して必要なロジックやコンポーネントは `src/lib/` または `src/components/` に配置します。
+- バッチ処理 (`src/scripts/`) は、Next.jsのサーバー（`src/app/api/`）から直接実行（Spawn）されるか、Cron等の外部スケジューラから独立したプロセスとして呼び出される設計であり、Next.jsのランタイムコンテキストには依存しません。
+
+
+## 5. データモデルとデータベース設計 (Data Models & Database Design)
+
+本システムは、構造化データ・時系列データ・全文検索を担うリレーショナルDB（SQLite）と、ベクトル検索を担うベクトルDB（Qdrant）のハイブリッド構成を採用しています。
+
+### 5.1 SQLite メインデータベース (`local.db`)
+フロントエンドおよびバッチ処理の主軸となるデータベースです。高速な全文検索を行うためFTS5仮想テーブルを活用しています。
+
+#### 5.1.1 マスタ・プロファイル系テーブル
+企業情報の根幹や、LLMによって生成された事業要約などを格納します。
+
+- **`equities_master` (銘柄マスタ)**: J-Quantsからの基本情報と、AIが抽出した事業要約・GICS分類を保持します。
+  - `ticker` (TEXT PK): 銘柄コード
+  - `name`, `market`, `industry` (TEXT): 企業名、市場、東証業種
+  - `last_updated` (TEXT): 最終更新日時
+  - `theme`, `summary` (TEXT): 1文要約、AI事業詳細要約
+  - `gics_sub_industry_id` (TEXT): 判定されたGICS分類ID
+  - `gics_similarity_score` (REAL): GICSベクトルとの類似度
+  - `theme_keywords` (TEXT): AIが抽出した機能的価値キーワード群
+  - `main_segment`, `sub_segments` (TEXT): 決算書から特定した主力・サブ事業セグメント（JSON文字列）
+
+- **`shikiho_profiles` (四季報クレンジングデータ)**: LLMが四季報の「特色」からノイズを排除した純粋な機能的価値を格納します。
+  - `ticker` (TEXT PK), `original_feature` (TEXT), `index_summary` (TEXT), `index_keywords` (TEXT)
+
+#### 5.1.2 時系列・財務データ系テーブル
+J-Quantsから取得した日足株価、財務情報、および株式分割履歴を格納します。これらはバッチ処理による遡及調整（AdjFactor適用）の対象となります。
+
+- **`daily_quotes` (日足株価データ)**
+  - `ticker`, `date` (TEXT, Composite PK)
+  - 生データ: `open`, `high`, `low`, `close`, `volume`, `turnover` (REAL)
+  - 遡及調整済データ: `adj_open`, `adj_high`, `adj_low`, `adj_close`, `adj_volume` (REAL)
+- **`financials` (財務・決算データ)**
+  - `ticker`, `date` (TEXT, Composite PK)
+  - `net_sales`, `operating_profit`, `profit` (REAL): 当期実績
+  - `forecast_net_sales` 等 (REAL): 次期予想
+  - `eps`, `adj_eps`, `adj_dividend` 等 (REAL): 1株当たり指標
+- **`stock_splits` (株式分割履歴)**
+  - `ticker`, `date` (TEXT, Composite PK), `factor` (REAL): 遡及調整用の分割係数
+
+#### 5.1.3 アプリケーション状態管理系テーブル
+スクリーナー表示用の計算済みキャッシュや、ユーザー定義のデータ、システムバッチの状態を管理します。
+
+- **`stocks` (スクリーナー用キャッシュ)**: 約4,000銘柄のテクニカル・ファンダメンタル指標を事前計算して格納する巨大テーブルです。フロントエンドの表示速度を担保します。
+  - 基本情報: `ticker` (PK), `name`, `current_price` 等
+  - トレンド指標: `sma_25`, `is_above_sma_25`, `is_golden_cross`, `is_perfect_order`, `long_term_trend` 等
+  - ブレイクアウト: `high_52w`, `is_high_52w_update` 等
+  - オシレータ・ボラティリティ: `rsi`, `macd`, `atr_14`, `stop_loss_2atr` 等
+  - ファンダメンタルズ: `market_cap`, `per`, `pbr`, `roe`, `dividend_yield_pct`, `revenue_growth_pct` 等
+  - 決算リアクション: `earnings_reaction_pct`, `post_earnings_rise_pct` 等
+- **`custom_themes`, `custom_theme_stocks` (マイテーマ管理)**: ユーザーが作成したポートフォリオ（テーマ）とその構成銘柄・類似度スコアを保存します。
+- **`sync_history` (同期履歴)**: J-Quantsデータの差分同期を管理（`key` PK, `synced_at`）。
+
+#### 5.1.4 FTS5 (全文検索) 仮想テーブル
+Qdrant（Dense Search）と組み合わせるための、SQLite組み込みのSparse Search（BM25スコア）用テーブルです。N-gram (`trigram`) トークナイザを利用します。
+- **`equities_fts`**: 銘柄の自然言語検索用。(`ticker`, `summary`, `theme_keywords` を対象に検索)
+- **`gics_fts`**: GICSカテゴリの検索用。(`sub_industry_id`, `category_name`, `description` を対象に検索)
+
+### 5.2 Qdrant ベクトルデータベース (Vector DB)
+自然言語による意味検索（Semantic Search）やRAG（Retrieval-Augmented Generation）のためのベクトルストアです。
+
+- **埋め込みモデル**: `bge-m3` (Ollama経由)
+- **ベクトル次元数**: 1024次元
+- **類似度計算 (Metric)**: Cosine (コサイン類似度)
+- **主要コレクション (Collections)**:
+  1. **`financial_reports`**: 決算PDF（Markdownパース済）の見出し・段落チャンクを保存。RAG抽出（Pass 1/Pass 2）の検索対象。
+  2. **`company_profiles`**: `equities_master` の事業要約やキーワードをベクトル化したもの。テーマ検索やマイテーマ構成銘柄の抽出対象。
+  3. **`gics_categories`**: GICSの158サブ産業カテゴリの名称と説明文をベクトル化したもの。銘柄のGICSハイブリッド分類時のDense検索対象。
+
+
+## 6. API・インターフェース仕様 (API Specifications)
+
+Next.js App Router (Route Handlers) を利用した、フロントエンド向けの BFF (Backend For Frontend) API仕様です。
+RESTfulなエンドポイント設計を基本としつつ、LLM呼び出しやバッチトリガーを含みます。
+
+### 6.1 銘柄データ管理API
+- **`POST /api/stocks/[ticker]/summary`**
+  - **用途**: 個別銘柄の事業要約（ユーザーによる手動補正）を更新します。
+  - **処理フロー**: `equities_master` を更新後、Ollamaで再度テキストをベクトル化してQdrantの `company_profiles` を上書きし、GICS分類の再判定までを一連のハイブリッド更新として実行します。
+
+### 6.2 マイテーマ（ポートフォリオ）管理API
+- **`GET /api/themes`**
+  - **用途**: 保存済みのマイテーマ一覧と、各テーマの構成銘柄数・トップ3銘柄を取得します。
+- **`POST /api/themes`**
+  - **用途**: 新規マイテーマを作成し、初期構成銘柄（`custom_theme_stocks`）のバルクインサートを実行します。
+- **`DELETE /api/themes/[id]`**
+  - **用途**: 単一のマイテーマと構成銘柄を削除します。
+- **`POST /api/themes/bulk-delete`**
+  - **用途**: 複数のマイテーマ（ID配列）をトランザクション内で一括削除します。
+- **`GET /api/themes/[id]/stocks`**
+  - **用途**: マイテーマに属する構成銘柄のリスト（基本情報、スコア等）を取得します。ネットワークグラフ描画用データとしても利用されます。
+- **`POST /api/themes/[id]/stocks`**
+  - **用途**: 既存のマイテーマに単一の銘柄を手動で追加します（重複時はスキップ）。
+
+### 6.3 動的テーマ検索・LLM拡張API
+- **`POST /api/themes/expand-query`**
+  - **用途**: ユーザーが入力した自然言語（例：「円安メリット」）を、Gemma3モデルを用いて関連する周辺キーワード群（カンマ区切り文字列）に拡張・抽出します。
+- **`POST /api/themes/search`**
+  - **用途**: 高度なハイブリッドテーマ検索を実行します。
+  - **処理フロー**: 拡張キーワードを用いて、QdrantのDense検索（`company_profiles`）とSQLiteのSparse検索（`equities_fts` BM25）を同時実行し、Local RRF (k=60) アルゴリズムによって融合させ、最終的なランキング（Top 50）を返します。
+- **`GET /api/themes/anomalies`**
+  - **用途**: `anomaly_detector.ts` を呼び出し、株価の異常な値動きや、既存テーマとの類似度乖離が発生している銘柄を検知・取得します。
+
+### 6.4 バッチ制御トリガーAPI
+Next.jsのAPIコンテキストから、独立したNode.jsのバックグラウンドジョブをキックするためのエンドポイントです。
+
+- **`POST /api/batch/reclassify`**
+  - **用途**: `run_gics_classification.ts` 等を呼び出し、業種再分類やテーマの再判定バッチを非同期でトリガーします。
+- **`POST /api/data-sync`**
+  - **用途**: フロントエンドのSyncボタンから呼び出され、データ同期から再計算までを一気通貫で行うオーケストレーションジョブ（`syncJQuants`）をトリガーします。
+  - **処理フロー**: 
+    1. J-Quantsからの日足・財務等の差分取得と株式分割の遡及調整。
+    2. 新規の決算PDFが存在する場合のパースとセグメント情報抽出（`processEarningsReports`）。
+    3. テクニカル・ファンダメンタル指標の再計算と `stocks` テーブルの更新（`calculateAndPopulateStocks`）。
+
+
+## 7. コアロジックとアルゴリズム (Core Logic & Algorithms)
+
+本章では、kabu3.0のドメイン固有の知能を司るLLMの完全なプロンプト群と、スクリーナーで利用されるテクニカル・ファンダメンタル計算式の具体的な定義を記載します。
+
+### 7.1 RAGパイプラインとAIプロンプト設定
+決算書PDFや四季報データから情報を抽出・分類するためのプロンプト設定です。すべて `gemma3:12b` (Ollama) に最適化されています。
+
+#### 7.1.1 決算書PDF抽出プロンプト (`src/scripts/rag/theme_prompts.ts`)
+**Pass 1: セグメント損益表抽出用**
+```text
+あなたはデータ抽出アシスタントです。以下の決算書のテキスト（主に表）から、各報告セグメントの名称と売上高を抽出してください。
+【厳守事項】
+1. 「計」「合計」「調整額」「全社」「内部売上高」「利益」などの計算用の行は絶対に除外してください。
+2. 出力は以下のJSON配列のみとし、マークダウンのコードブロックで囲まないでください。
+
+[
+  { "segment": "セグメント名", "revenue": "売上高の文字列" }
+]
+
+【テキスト】
+{pass1Text}
+```
+
+**Pass 2: セグメント事業内容・深掘り抽出用**
+```text
+あなたはデータ抽出アシスタントです。以下のテキストから、指定された各セグメントの事業内容（具体的な製品名、サービス名、対象顧客など）を抽出してください。
+テキストに記載がない場合は「記載なし」としてください。
+
+【対象セグメント】
+{segmentNames}
+
+【厳守事項】
+1. セグメント名をそのまま繰り返すのではなく、関連キーワード（製品名など）を必ず拾うこと。
+2. 存在しない情報を勝手に推測したり捏造したりしないこと。
+3. 出力は以下のJSON配列のみとし、マークダウンで囲まないでください。JSONの値に改行を含めないでください。
+
+[
+  { "segment": "セグメント名", "description": "事業内容の要約" }
+]
+
+【テキスト】
+{pass2Text}
+```
+
+**Step 2: アナリスト1文要約用**
+```text
+あなたはプロの証券アナリストです。以下の企業のセグメント別売上構成と参考情報を基に、この企業がどのようなビジネスを中核としているか、投資家向けに1文（30〜50文字程度）でわかりやすく要約してください。
+※重要：テキストに記載のない用途や、企業名からの勝手な連想は絶対に禁止します。
+
+【企業名】: {companyName} ({ticker5})
+{refInfo}
+【売上が最大の主力セグメント】: {maxSegment}
+【その他の展開セグメント】: {otherSegments}
+
+【出力形式】
+事業要約: [1文要約]
+```
+
+#### 7.1.2 決算アナリストレポート生成プロンプト (`src/scripts/analyze_stock_rag.ts`)
+2つのドキュメント（前回決算と最新決算）の差分を抽出し、プロのアナリスト文章に清書します。
+
+**Step 1: 事実抽出ボット（System Prompt）**
+```text
+あなたは無機質なデータ転記ボットです。推論、要約、単位変換を一切行わず、提供されたテキストから事実のみを抽出してください。
+【厳守事項】
+1. 計算・四則演算の禁止: 数値はテキストにあるものをそのまま抽出すること。「足し算・引き算・パーセンテージ計算・金額単位変換」を絶対に行わないこと。
+2. 事実のコピペに徹する：テキストに書かれていない単語は絶対に補完・捏造しないでください。
+3. 対象データの限定：「連結（Consolidated）」の数値を優先し、「個別」は無視してください。
+4. 出力はJSONのみ：以下のJSONスキーマの形式で出力し、マークダウンのコードブロックで囲むこと。
+```
+
+**Step 2: アナリスト清書（System Prompt）**
+```text
+あなたはプロの証券アナリストです。
+提供された【抽出済み決算データ】のみを情報源として、最終的な決算アナリストレポートを作成してください。
+【厳守事項】
+1. 外部知識の完全遮断：提供されたデータ内に存在しないキーワードを勝手に生成しないでください。事実ベース以外の推測（ハルシネーション）は厳禁です。
+2. アナリストのトーン：事実に忠実でありつつ、証券アナリストとしての専門的な語彙を用いて、論理的でプロフェッショナルな文章に整えてください。
+3. インプリケーション（示唆）の提示：'ai_comment'の項目では、提供された事実データから論理的に導き出せる「総合的な評価と今後の展望」を鋭く記述してください。
+4. 全項目の統合出力：提供された3つのデータの内容を清書し、あなた自身の「ai_comment」を追加した4つの項目でJSONを出力してください。
+5. 【重要】データ型の厳守：出力するJSONのすべての値（value）は、必ず「プレーンテキストの文字列（String）」にしてください。配列やオブジェクトを絶対に使用しないでください。
+```
+
+#### 7.1.3 GICS 2段階分類プロンプト (`src/scripts/run_gics_classification.ts`)
+**Stage 1 (候補絞り込み)**
+```text
+「{companyName}」について「事業要約」、「機能的価値 キーワード」、「メイン事業セクション」、「サブ事業セクション」の4つの情報をもとに、関連性が高いテーマをテーマリストから最大3つ選び、文字列のJSON配列として回答してください。
+最優先判定基準: 【メイン事業セクション】の売上規模および事業内容に最も直接合致するテーマを必ず1つ以上含めてください。
+```
+**Stage 2 (最終決定)**
+```text
+以下の3つの候補の中から、「{companyName}」の事業内容に最も一致するテーマを厳密に1つ選び、テーマ名のみ回答してください。
+```
+
+#### 7.1.4 動的テーマ検索・キーワード拡張プロンプト (`src/app/api/themes/expand-query/route.ts`)
+自然言語検索時に入力された曖昧なクエリを、FTS5（Sparse Search）で検索可能な周辺キーワードに拡張します。
+```text
+「{query}」という株式テーマに関連する具体的な事業内容や関連キーワードを、日本語でカンマ区切りで10個挙げてください。解説は一切不要です。
+```
+
+### 7.2 LLM出力揺れの補正とTS側の安全装置 (Output Sanitization)
+LLM（とくにローカルのgemma3:12b）は指定フォーマットを逸脱する出力揺れを起こすため、パイプラインの随所にTypeScript側での強固な補正ロジックを挟んでいます。
+
+- **決算金額の単位パース (`formatJapaneseCurrency`)**:
+  - LLMに「金額の単位変換」をさせると計算ミス（ハルシネーション）が高確率で発生するため、LLMには一切計算させず「123,456百万円」とそのまま抽出させます。
+  - その後、TS側の正規表現とBigInt計算によって安全に「1234億5600万円」等へ変換し、Step 2（清書）のLLMへ渡します（`analyze_stock_rag.ts`）。
+- **JSONパース失敗時のフォールバック**:
+  - `analyze_stock_rag.ts` では、LLMがJSON文字列として出力しなかった場合、`try/catch` で生テキストとしてそのまま次段へ渡すフォールバックを持っています。
+  - `run_gics_classification.ts` の Stage 1 でJSON配列の出力に失敗した場合は、エラーで停止せず、RRFスコアの「Top 3」を強制的に採用して Stage 2 に進みます。
+- **余分な装飾・不要文字の除去**:
+  - `expand-query` API では、LLMが「です・ます」や不要な句点（。）、改行を追加した場合を想定し、文字列処理で確実に不要文字を除去してクエリ化します。
+
+### 7.3 東証33業種 -> GICS ハード制約マッピング
+ハルシネーションによる大分類の誤りを防ぐため、`src/lib/anomaly_detector.ts` 等で定義された `TSE_TO_GICS_MAPPING` を利用します。
+- (例) `情報・通信業` → 許可されるGICSセクター: `情報通信`, `一般消費財・サービス`, `資本財`, `金融`, `ヘルスケア`, `不動産`
+- (例) `銀行業` → 許可されるGICSセクター: `金融`
+※この制約フィルターを通過しないGICSカテゴリは、どれだけベクトル類似度が高くても棄却されます。
+
+### 7.4 テクニカル・ファンダメンタル指標計算式 (`src/lib/calculator.ts`)
+スクリーナー表示やアラート提供のためにSQL（またはTS）で計算される各指標の定義です。
+
+- **時価総額 (億円)**: `最新株価 * 調整後発行済株式数 / 100,000,000`
+- **営業利益率 (%)**: `営業利益 / 売上高 * 100`
+- **自己資本比率 (%)**: `(equity_to_asset_ratio) * 100`
+- **配当利回り (%)**: `調整後予想配当 / 最新株価 * 100`
+- **成長率指標 (売上/営利/EPS)**: `(次期予想 / 前期実績 * 100) - 100` ※前期が0以下の場合は異常値となるため `NULL` として除外。
+- **予想達成率 (%)**: `営業利益実績 / 次期予想営業利益 * 100`
+- **単純移動平均 (SMA 25/75/200)**: 過去指定日数の `adj_close` の平均。
+- **SMA乖離率 (%)**: `(現在値 - SMA) / SMA * 100`
+- **RSI (14日)**: `14日間の平均値上がり幅 / (14日間の平均値上がり幅 + 平均値下がり幅) * 100`
+- **MACD**: `12日EMA - 26日EMA` (MACDシグナルはMACDの9日EMA)
+- **ATR (Average True Range, 14日)**: `Max(当日高値-当日安値, 当日高値-前日終値, 前日終値-当日安値)` の14日間平均。
+- **パーフェクトオーダー**: `現在値 > SMA25 AND SMA25 > SMA75 AND SMA75 > SMA200` がすべて成立。
+- **ゴールデンクロス**: `当日: SMA25 > SMA75 AND 前日: SMA25 <= SMA75`
+- **高値ブレイクアウト**: `当日の高値 >= 過去N日間(20日, 60日, 52週)の最高値`
+- **出来高/売買代金倍率**: `当日の出来高 / 過去25日間の平均出来高`
+- **決算リアクション (%)**: `(決算翌日の終値 - 決算前日の終値) / 決算前日の終値 * 100`
+
+
+## 8. エラーハンドリングと運用設計 (Error Handling & Operations)
+
+本システムは完全ローカル環境での稼働を前提としているため、バッチ処理の中断に対する復帰（冪等性）や、ローカルリソース（特にGPU）の枯渇に対するフェイルセーフを考慮した設計となっています。
+
+### 8.1 バッチ処理の冪等性 (Idempotency)
+長時間のバッチ処理が中断されても、再実行時に二重処理を防止する仕組みを実装しています。
+
+- **J-Quantsデータ同期 (`sync_history`)**:
+  - ダウンロード・処理が完了したCSVのS3 Keyを `sync_history` テーブルに記録します。
+  - 再実行時は未記録のファイルのみを差分取得（Incremental Sync）します。
+  - DBへの書き込みは `INSERT OR REPLACE` や `INSERT OR IGNORE` を多用し、株式分割（`stock_splits`）の遡及計算も `ON CONFLICT DO NOTHING` と事前存在チェックを組み合わせて冪等性を担保しています。
+- **決算PDF解析 (`data/pdf_batch_history.json`)**:
+  - `Docling` による重いPDFパース処理を回避するため、解析が完了したファイル履歴をJSON形式で記録し、未処理のPDFのみを対象とします。
+
+### 8.2 一時ファイルとロギング (`/scratch` ディレクトリ)
+検証用の出力やバッチのエラーログ、中間データのダンプは、ソースコード（`src/`）や永続データ（`data/`）を汚染しないよう、すべて `scratch/` ディレクトリに吐き出す運用としています。
+- **抽出生データ**: `scratch/step1_debug.json`（LLMのJSONフォーマット破綻調査用）
+- **バッチログ**: `scratch/phase2_output.log`, `scratch/shikiho_output.log`
+- **差分出力**: `scratch/phase2_changes.csv`（旧判定から新判定への移行確認用）
+
+### 8.3 ローカルLLMのリソース競合・制約事項 (Resource Constraints)
+本システムの中核である `gemma3:12b` などのローカルLLM（Ollama経由）は、VRAMおよびシステムメモリを大きく占有します。
+
+- **GPUメモリ競合の回避**:
+  - LLM推論中または重いバッチ処理中（特に `run_gics_classification.ts` 等の並列処理中）に、**高負荷な3Dゲーム等を同時にプレイすると、GPUリソース（VRAM等）の競合によりOllamaの推論プロセスがクラッシュ（OOM等）したり、著しいパフォーマンス低下・タイムアウトを引き起こす危険性（「ゲームするとまずい」制約）**があります。
+  - バッチ実行中は重い他のローカルアプリケーションの起動を避けるか、バッチをバックグラウンドで切り離して安全なタイミングで実行する運用が推奨されます。
+
+### 8.4 Qdrant と SQLite のバックアップ方針
+- **SQLite (`local.db`)**:
+  - 単一ファイルであるため、OSレベルのコピーで容易にバックアップが可能です。
+- **Qdrant**:
+  - 内部で `company_profiles` 等のコレクションを管理しています。再構築が必要な場合は `equities_master` の `summary` と `theme_keywords` を元に再度エンベディングAPI（Ollama）を叩くことで完全復元が可能です（`src/app/api/stocks/[ticker]/summary/route.ts` などのロジックを流用）。
+
+
+## 9. システム定数・設定値 (System Configuration)
+パイプラインや検索精度に影響を与える主要なハードコード定数および環境変数です。
+
+- **LLM モデル**: `gemma3:12b` (Ollamaローカル実行)
+- **Embedding モデル**: `bge-m3` (次元数: 1024, Distance: Cosine)
+- **Qdrant URL**: `http://localhost:6333`
+- **Ollama URL**: `http://localhost:11434/api/generate`
+- **RRF K値 (`RRF_K`)**: `60` （Hybrid Search 時の Dense/Sparse スコア統合の平滑化定数）
+- **SQLite バッチ挿入サイズ**: `5,000` 件ずつ（J-Quantsデータのバルクインサート時のトランザクションサイズ）
+- **PDFチャンクサイズ**: `2,500` 文字（`headerAwareChunker`）
+- **GICS分類時のSparse検索 抽出件数制限**: 上位 `158` 件（GICS全カテゴリ数と同数）
+- **GICS分類時の RRF Top抽出数**: 上位 `10` 件 -> LLM（Stage 1）でさらに `3` 件に絞り込み。
+
+## 10. 今後の課題・ロードマップ (Roadmap)
+現在のシステム構成における課題と、将来に向けた拡張構想です。
+
+1. **バッチ処理の高速化と並列化**
+   - 現在のGICS業種判定やアナリストレポート生成は、ローカルLLMの逐次処理（forループ）となっており、全銘柄を回すと膨大な時間がかかります。キューイングシステム（Redis/BullMQ等）の導入による並列処理化（※GPUのVRAM上限に依存）。
+2. **自動アノテーション・教師データの蓄積**
+   - LLMが誤判定したGICSやテーマについて、ユーザーが手動でUIから訂正した履歴を別テーブルに保存し、今後のFew-Shotプロンプトの事例としてフィードバックさせる自己改善ループの構築。
+3. **異常値検知 (Anomaly Detection) の強化**
+   - 現在の `api/themes/anomalies` による株価・乖離率ベースの異常検知に加え、財務諸表の不自然な変化（例: 売掛金の急増）などを自動検知するロジックの追加。
+4. **LLMプロンプトの外部管理**
+   - ソースコード内にハードコードされている各種プロンプト（`theme_prompts.ts` 等）をDB化し、フロントエンドUIからABテストや微調整を行えるようにする。
+
