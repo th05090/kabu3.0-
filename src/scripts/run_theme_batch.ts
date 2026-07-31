@@ -62,7 +62,7 @@ async function main() {
       const embResTable = await fetch(EMBED_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "bge-m3", prompt: "報告セグメント情報 事業セグメント別売上高" })
+        body: JSON.stringify({ model: "bge-m3", prompt: "セグメント情報 事業別 報告 計 | 収益" })
       }).then(r => r.json());
 
       const searchResTable = await qdrant.search("earnings_reports", {

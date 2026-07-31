@@ -261,6 +261,10 @@ export async function syncJQuants() {
       });
     }
 
+    console.log('[J-Quants] Calling earnings processor for new PDFs...');
+    const { processEarningsReports } = await import('./earnings_processor');
+    await processEarningsReports();
+
     console.log('[J-Quants] Calling metrics calculator...');
     const { calculateAndPopulateStocks } = await import('./calculator');
     const calcResult = await calculateAndPopulateStocks();

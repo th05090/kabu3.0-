@@ -25,6 +25,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ [
     whereClauses.push('industry LIKE ?');
     queryArgs.push(`%${params.industry}%`);
   }
+  if (params.gics_sub_industry) {
+    whereClauses.push('gics_sub_industry_id = ?');
+    queryArgs.push(params.gics_sub_industry);
+  }
   if (params.market) {
     whereClauses.push('market = ?');
     queryArgs.push(params.market);

@@ -2,6 +2,16 @@
 
 import React from 'react';
 import { useSearchParams } from 'next/navigation';
+import { GICS_DICTIONARY } from '@/data/gics_dictionary';
+
+// Group GICS by Sector
+const groupedGics = Object.entries(GICS_DICTIONARY).reduce((acc, [id, gics]) => {
+  if (!acc[gics.sector_name]) {
+    acc[gics.sector_name] = [];
+  }
+  acc[gics.sector_name].push({ id, name: gics.sub_industry_name });
+  return acc;
+}, {} as Record<string, { id: string; name: string }[]>);
 
 export function StockFilter() {
   const searchParams = useSearchParams();
@@ -18,7 +28,20 @@ export function StockFilter() {
           <h4>基本</h4>
           <label>コード: <input type="text" name="ticker" defaultValue={getVal('ticker')} style={{width:'80px'}} /></label>
           <label>銘柄名: <input type="text" name="name" defaultValue={getVal('name')} style={{width:'150px'}} /></label>
-          <label>業種: <input type="text" name="industry" defaultValue={getVal('industry')} style={{width:'150px'}} /></label>
+          <label>業種(東証33): <input type="text" name="industry" defaultValue={getVal('industry')} style={{width:'150px'}} /></label>
+          <label>
+            テーマ(GICS細分類): 
+            <select name="gics_sub_industry" defaultValue={getVal('gics_sub_industry')} style={{width:'150px'}}>
+              <option value="">すべて</option>
+              {Object.entries(groupedGics).map(([sectorName, items]) => (
+                <optgroup key={sectorName} label={sectorName}>
+                  {items.map(item => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
           <label>
             市場: 
             <select name="market" defaultValue={getVal('market')}>

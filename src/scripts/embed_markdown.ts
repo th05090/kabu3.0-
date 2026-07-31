@@ -115,8 +115,10 @@ async function main() {
     process.exit(1);
   }
 
-  // 2. Load Markdown
-  const mdPath = path.join(process.cwd(), 'data', 'md', `${ticker}_${period}.md`);
+  // 2. Read Markdown File
+  // In the new pipeline, the markdown file is saved alongside the PDF in data/pdfs/[ticker]/
+  const mdPath = path.join(process.cwd(), 'data', 'pdfs', ticker, `${ticker}_${period}.md`);
+  
   let markdown = '';
   try {
     markdown = await fs.readFile(mdPath, 'utf-8');
@@ -130,8 +132,33 @@ async function main() {
   const chunks = await parseMarkdownToChunks(markdown);
   console.log(`  -> Generated ${chunks.length} semantic chunks.`);
 
-  // 4. Embedding and Upserting
-  console.log(`[3] Embedding chunks and saving to Qdrant...`);
+  // 4. Delete existing chunks for this ticker and period to prevent duplicates
+  console.log(`[3] Deleting existing chunks for ticker ${ticker} period ${period} (if any)...`);
+  await qdrant.delete(COLLECTION_NAME, {
+    filter: {
+      must: [
+        { key: "ticker", match: { value: ticker } },
+        { key: "period", match: { value: period } }
+      ]
+    }
+  });
+
+  // 5. Embedding and Upserting
+  console.log(`[4] Deleting existing points for ${ticker} ${period}...`);
+  try {
+    await qdrant.delete(COLLECTION_NAME, {
+      filter: {
+        must: [
+          { key: "ticker", match: { value: ticker } },
+          { key: "period", match: { value: period } }
+        ]
+      }
+    });
+  } catch (e: any) {
+    console.log("    No existing points found or delete failed:", e.message);
+  }
+
+  console.log(`[5] Embedding chunks and saving to Qdrant...`);
   const points = [];
   
   for (let i = 0; i < chunks.length; i++) {

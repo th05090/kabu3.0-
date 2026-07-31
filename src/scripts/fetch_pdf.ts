@@ -35,7 +35,7 @@ async function downloadPdf(url: string, outputPath: string) {
   console.log(`Saved PDF to: ${outputPath} (${buffer.length} bytes)`);
 }
 
-async function scrapeIRBank(ticker: string) {
+export async function scrapeIRBank(ticker: string, dateStr: string = 'latest') {
   try {
     const listUrl = `https://irbank.net/${ticker}/ir`;
     console.log(`[1] Fetching IR list for ${ticker}: ${listUrl}`);
@@ -50,8 +50,8 @@ async function scrapeIRBank(ticker: string) {
       const text = $list(el).text().trim();
       const href = $list(el).attr('href');
       
-      // Look for "決算短信" and explicitly exclude "修正"
-      if (text.includes('決算短信') && !text.includes('修正')) {
+      // Look for "決算短信" and explicitly exclude "修正", "訂正", "補足"
+      if (text.includes('決算短信') && !text.includes('修正') && !text.includes('訂正') && !text.includes('補足')) {
         // Find the most recent one (first one that matches)
         if (!targetDetailUrl && href) {
           targetDetailUrl = href;
@@ -93,19 +93,21 @@ async function scrapeIRBank(ticker: string) {
 
     console.log(`[3] Found PDF URL: ${pdfUrl}`);
 
-    // Create pdfs directory if not exists
-    const pdfDir = path.join(process.cwd(), 'data', 'pdfs');
-    await fs.mkdir(pdfDir, { recursive: true });
+    // Create pdfs/[ticker] directory if not exists
+    const tickerPdfDir = path.join(process.cwd(), 'data', 'pdfs', ticker);
+    await fs.mkdir(tickerPdfDir, { recursive: true });
 
-    const outputPath = path.join(pdfDir, `${ticker}_latest.pdf`);
+    const outputPath = path.join(tickerPdfDir, `${ticker}_${dateStr}.pdf`);
     
     console.log(`[4] Downloading PDF...`);
     await downloadPdf(pdfUrl, outputPath);
     
     console.log(`Success! PDF for ${ticker} successfully downloaded.`);
 
+    return outputPath;
   } catch (err: any) {
     console.error(`Error processing ${ticker}:`, err.message);
+    throw err;
   }
 }
 
@@ -117,7 +119,11 @@ async function main() {
   }
   
   const ticker = args[0];
-  await scrapeIRBank(ticker);
+  const dateStr = args[1] || 'latest';
+  await scrapeIRBank(ticker, dateStr);
 }
 
-main();
+// Only run main if called directly
+if (require.main === module) {
+  main();
+}

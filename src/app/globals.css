@@ -255,11 +255,15 @@ a { color: inherit; text-decoration: none; }
   font-size: 0.9rem;
   margin-bottom: 0.25rem;
 }
-.filter-section input[type="number"], .filter-section select {
+.filter-section input[type="text"], .filter-section input[type="number"], .filter-section select {
   padding: 0.25rem;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: transparent;
+  background: var(--background);
+  color: var(--foreground);
+}
+.filter-section select option {
+  background: var(--background);
   color: var(--foreground);
 }
 .filter-section input[type="number"] {
