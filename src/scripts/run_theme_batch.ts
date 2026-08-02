@@ -1,16 +1,202 @@
 import { createClient } from "@libsql/client";
 import { QdrantClient } from "@qdrant/js-client-rest";
-import { askLLM, pass1PromptTemplate, pass2PromptTemplate, step2PromptTemplate, unifiedPromptTemplate } from "./rag/theme_prompts.js";
+import fs from 'fs';
+import path from 'path';
+import { askLLM, pass2PromptTemplate, step2PromptTemplate, unifiedPromptTemplate } from "./rag/theme_prompts.js";
 
 const DB_URL = "file:local.db";
 const EMBED_URL = "http://localhost:11434/api/embeddings";
 const QDRANT_URL = "http://localhost:6333";
+const EMBED_MODEL = "bge-m3";
 
+// Helper for Ollama Embeddings
+async function embedOllama(model: string, prompt: string) {
+    const res = await fetch(EMBED_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, prompt })
+    });
+    if (!res.ok) throw new Error("Embed failed");
+    return await res.json();
+}
+
+// ---------------- Stage 1: Markdown Table Parsing ----------------
+function parseMarkdownTable(markdownTable: string) {
+  const lines = markdownTable.split('\n').map(l => l.trim()).filter(l => l.startsWith('|'));
+  const dataLines = lines.filter(l => !l.replace(/\|/g, '').match(/^[\s\-\:]+$/));
+  
+  const grid = dataLines.map(line => {
+    let cols = line.split('|');
+    cols.shift(); 
+    if (cols.length > 0 && cols[cols.length - 1].trim() === '') cols.pop();
+    return cols.map(c => c.replace(/\s+/g, ''));
+  });
+  if (grid.length === 0) return null;
+
+  let targetRow = -1, targetCol = -1, isTransposed = false;
+  const revenueKeywords = ["外部顧客", "顧客との契約", "売上高", "営業収益", "売上収益", "収益"];
+  
+  for (let keyword of revenueKeywords) {
+    for (let r = 0; r < grid.length; r++) {
+      if (grid[r][0] && grid[r][0].includes(keyword)) {
+        targetRow = r; isTransposed = true; break;
+      }
+    }
+    if (targetRow !== -1) break;
+  }
+  if (targetRow === -1) {
+    for (let keyword of revenueKeywords) {
+      for (let r = 0; r < Math.min(2, grid.length); r++) {
+        for (let c = 0; c < grid[r].length; c++) {
+          if (grid[r][c] && grid[r][c].includes(keyword)) {
+            targetCol = c; isTransposed = false; break;
+          }
+        }
+        if (targetCol !== -1) break;
+      }
+      if (targetCol !== -1) break;
+    }
+  }
+
+  const results = [];
+  const excludeRegex = /計|合計|調整額|全社|その他|消去|連結|損益計算書/;
+
+  if (isTransposed && targetRow !== -1) {
+    for (let c = 1; c < grid[0].length; c++) {
+      let segName = '';
+      for (let r = 0; r < targetRow; r++) {
+        const cell = grid[r][c] ? grid[r][c].trim() : '';
+        if(cell && !cell.includes('報告セグメント') && !cell.includes('セグメント情報') && !/^[\d,\.\-\+－]+$/.test(cell)) {
+          segName += cell;
+        }
+      }
+      if (!segName) continue;
+      if (excludeRegex.test(segName)) break;
+      
+      const revenueStr = grid[targetRow][c] || "";
+      if (revenueStr) {
+        results.push({ segment: segName, revenue: revenueStr });
+      }
+    }
+  } else if (!isTransposed && targetCol !== -1) {
+    for (let r = 1; r < grid.length; r++) {
+      let segName = grid[r][0];
+      if (!segName) continue;
+      if (excludeRegex.test(segName)) break;
+      
+      const revenueStr = grid[r][targetCol] || "";
+      if (revenueStr) {
+        results.push({ segment: segName, revenue: revenueStr });
+      }
+    }
+  }
+  return results.length > 0 ? results : null;
+}
+
+function runStage1(markdown: string) {
+  const tableRegex = /\|?[^\n]*?(?:報告セグメント|セグメント情報|事業部門|セグメント)[^\n]*?\|?\r?\n[ \|\-:]+\r?\n(?:\|?[^\n]*?\|?\r?\n)+/g;
+  const matches = markdown.match(tableRegex);
+  if (!matches) return null;
+  for (const match of matches) {
+      const parsed = parseMarkdownTable(match);
+      if (parsed) return parsed;
+  }
+  return null;
+}
+
+// ---------------- Stage 2: Single Segment Regex ----------------
+function runStage2(markdown: string) {
+  const regexes = [
+    /(?:当社グループの事業セグメントは|当社グループの報告セグメントは|当社グループは|当社は)(?:、)?(?:「)?([^、。「」\n]+?)(?:」)?(?:事業)?の?単一(?:の)?(?:セグメント|事業)[^、。\n]*?である(?:ため|り)/,
+    /(?:当社グループは|当社は)(?:、)?([^、。「」\n]+?)(?:事業)?のみの単一(?:の)?(?:セグメント|事業)/
+  ];
+  for (const regex of regexes) {
+    const m = markdown.match(regex);
+    if (m && m[1]) {
+      let segName = m[1].replace(/\s+/g, '').replace(/事業$/, '') + '事業';
+      if (segName.includes("当社")) continue;
+      return [{ segment: segName, revenue: "N/A (Single)" }];
+    }
+  }
+  return null;
+}
+
+// ---------------- Stage 3: Qdrant + LLM Fallback ----------------
+async function runStage3(ticker: string, qdrant: QdrantClient) {
+    let embedRes;
+    try {
+        embedRes = await embedOllama(EMBED_MODEL, "セグメント情報 事業別 報告 計 | 収益");
+    } catch(e) {
+        return null;
+    }
+
+    let searchRes;
+    try {
+        searchRes = await qdrant.search('earnings_reports', { 
+            vector: embedRes.embedding, 
+            limit: 3,
+            filter: { must: [{ key: 'ticker', match: { value: ticker } }] }
+        });
+    } catch(e) {
+        return null;
+    }
+    
+    if (!searchRes || searchRes.length === 0) return null;
+    
+    const context = searchRes.map((r: any, i: number) => `【Chunk ${i + 1}】\n${r.payload.text}`).join('\n\n');
+    
+    const prompt = `あなたは企業の決算説明資料から、事業セグメントとその売上高を抽出する専門家です。
+以下のテキストから、報告されている事業セグメント名と、その売上高（または収益）を抽出してください。
+
+【厳格なルール】
+- 以下のフォーマットの箇条書きテキストとして出力してください。余計な文章は一切含めないでください。
+  - セグメント: [セグメント名], 売上高: [数値]
+  - セグメント: [セグメント名], 売上高: [数値]
+- 「国内」「海外」「日本」「北米」などの地域別売上や、「第1四半期」「上期」などの期間別データ、または「売上高」「営業利益」などの単なる勘定科目しかない場合は、セグメント情報ではないため、絶対に「なし」とだけ出力してください。
+- 該当するセグメント情報が見つからない場合も「なし」と出力してください。
+
+【テキスト】
+${context}`;
+
+    let textOutput = "";
+    try {
+      textOutput = await askLLM(prompt, false); // format false means plain text
+    } catch (e) {
+      return null;
+    }
+    
+    if (textOutput.includes("なし") && !textOutput.includes("セグメント:")) {
+        return null;
+    }
+    
+    const regex = /\-\s*セグメント:\s*(.+?),\s*売上高:\s*([\d,]+)/g;
+    let match;
+    const segments = [];
+    const excludeRegex = /計|合計|調整額|全社|その他|消去|連結|損益計算書/; // Filters out totals
+
+    while ((match = regex.exec(textOutput)) !== null) {
+        const segName = match[1].trim();
+        if (excludeRegex.test(segName)) {
+            console.log(`[Stage 3 Filtered Out]: ${segName}`);
+            continue; 
+        }
+        segments.push({ segment: segName, revenue: match[2].trim() });
+    }
+    
+    return segments.length > 0 ? segments : null;
+}
+
+// Simple helper to generate a deterministic UUID-like string from a ticker
+function generateUuidForTicker(ticker: string): string {
+  const hex = Buffer.from(ticker).toString("hex").padEnd(32, "0");
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;
+}
+
+// ---------------- MAIN BATCH ----------------
 async function main() {
   const db = createClient({ url: DB_URL });
   const qdrant = new QdrantClient({ url: QDRANT_URL });
 
-  // Add column for final theme if it doesn't exist
   try {
     await db.execute("ALTER TABLE equities_master ADD COLUMN theme TEXT");
     await db.execute("ALTER TABLE equities_master ADD COLUMN summary TEXT");
@@ -19,7 +205,6 @@ async function main() {
     // Column might already exist, ignore
   }
 
-  // Ensure Qdrant collection for profiles exists
   try {
     const collections = await qdrant.getCollections();
     const exists = collections.collections.some(c => c.name === "company_profiles");
@@ -33,17 +218,19 @@ async function main() {
     console.error("Warning: Failed to check/create Qdrant collection:", e);
   }
 
-  // Get tickers that don't have a summary yet (Exclude ETFs and REITs by name)
   const targetsResult = await db.execute(`
     SELECT ticker, name FROM equities_master 
     WHERE sub_segments IS NULL 
+      AND market != 'TOKYO PRO MARKET'
+      AND name NOT LIKE '%上場信託%'
       AND name NOT LIKE '%ETF%'
       AND name NOT LIKE '%ETN%'
-      AND name NOT LIKE '%REIT%'
-      AND name NOT LIKE '%リート%'
-      AND name NOT LIKE '%ＥＴＦ%'
+      AND name NOT LIKE '%ＥＴＮ%'
       AND name NOT LIKE '%投資法人%'
+      AND name NOT LIKE '%リート%'
+      AND name NOT LIKE '%上場投信%'
       AND name NOT LIKE '%ファンド%'
+      AND name NOT LIKE '%ＥＴＦ%'
     ORDER BY ticker ASC
   `);
 
@@ -58,47 +245,47 @@ async function main() {
     console.log(`=========================================`);
 
     try {
-      // Pass 1: セグメント名と売上高の特定
-      const embResTable = await fetch(EMBED_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "bge-m3", prompt: "セグメント情報 事業別 報告 計 | 収益" })
-      }).then(r => r.json());
-
-      const searchResTable = await qdrant.search("earnings_reports", {
-        vector: embResTable.embedding,
-        limit: 5,
-        filter: { must: [{ key: "ticker", match: { value: ticker5 } }] },
-        with_payload: true
-      });
-
-      let pass1Text = searchResTable.map(hit => hit.payload?.text || "").join("\n");
-      if (!pass1Text.trim()) pass1Text = "申し訳ありませんが、テキストが提供されていません。";
-
-      let llmText1 = await askLLM(pass1PromptTemplate(pass1Text), true);
-      console.log("Raw LLM Text:\n" + llmText1);
-      
-      const arrayMatch = llmText1.match(/\[\s*\{[\s\S]*\}\s*\]/);
-      if (arrayMatch) {
-        llmText1 = arrayMatch[0];
-      } else {
-        llmText1 = llmText1.replace(/```json/g, "").replace(/```/g, "").trim();
-      }
-      
-      let segmentsData = [];
+      const pdfDir = path.join(process.cwd(), "data", "pdfs", ticker5);
+      let markdown = "";
       try {
-        segmentsData = JSON.parse(llmText1);
-        if (!Array.isArray(segmentsData)) segmentsData = [segmentsData];
+          if (fs.existsSync(pdfDir)) {
+              const files = fs.readdirSync(pdfDir).filter(f => f.endsWith(".md"));
+              if (files.length > 0) {
+                  markdown = fs.readFileSync(path.join(pdfDir, files[0]), "utf-8");
+              }
+          }
       } catch (e) {
-        // Error is handled below by fallback
+          console.error(`Warning: Could not read Markdown for ${ticker5}`);
       }
 
-      const segmentNames = segmentsData.map((s: any) => s.segment).filter((n: string) => n && n.trim() !== "");
+      // Phase 1: 3-Stage Extraction
+      let segmentsData = runStage1(markdown);
+      let extractionStage = "Stage 1 (Table)";
       
-      let summary = "";
-      let mainSegmentJson = "";
-  let subSegmentsJson = "";
+      if (!segmentsData) {
+          segmentsData = runStage2(markdown);
+          extractionStage = "Stage 2 (Regex)";
+          if (!segmentsData) {
+              segmentsData = await runStage3(ticker5, qdrant);
+              extractionStage = segmentsData ? "Stage 3 (Qdrant)" : "Failed (Fallback to Plan 1)";
+          }
+      }
+
+      console.log(`-> Extraction Stage: ${extractionStage}`);
       
+      // Deduplicate segments
+      if (segmentsData) {
+           const seen = new Set();
+           segmentsData = segmentsData.filter((s: any) => {
+               if(seen.has(s.segment)) return false;
+               seen.add(s.segment);
+               return true;
+           });
+      }
+      
+      const segmentNames = (segmentsData || []).map((s: any) => s.segment).filter((n: string) => n && n.trim() !== "");
+
+      // Get Shikiho Profile Reference Info
       const shikihoTicker = ticker5.substring(0, 4);
       const shikihoRes = await db.execute({
         sql: "SELECT index_summary, index_keywords FROM shikiho_profiles WHERE ticker = ? OR ticker = ?",
@@ -114,46 +301,47 @@ async function main() {
         refInfo = `【参考情報】\n**事業概要:**\n${indexSummary}\n\n**機能的価値 (キーワード):**\n${indexKeywords}\n`;
       }
 
-      if (segmentNames.length === 0) {
-        console.log(`-> [Fallback] セグメント抽出不能のため、統合プロンプト（Plan 1）に移行`);
-        const embResText = await fetch(EMBED_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "bge-m3", prompt: "報告セグメント 概要 事業内容 製品 サービス" })
-        }).then(r => r.json());
+      let summary = "";
+      let mainSegmentJson = "";
+      let subSegmentsJson = "";
 
+      // Phase 2: Dynamic Pass 2 or Plan 1
+      if (segmentNames.length === 0) {
+        console.log(`-> [Fallback] No segments found. Running Unified Prompt (Plan 1).`);
+        
+        const embResText = await embedOllama(EMBED_MODEL, "報告セグメント 概要 事業内容 製品 サービス");
         let earningsText = "";
         try {
           const searchResText = await qdrant.search("earnings_reports", {
             vector: embResText.embedding,
             limit: 3,
-            filter: { must: [{ key: "ticker", match: { value: ticker5 } }] },
-            with_payload: true
+            filter: { must: [{ key: "ticker", match: { value: ticker5 } }] }
           });
           earningsText = searchResText.map(hit => hit.payload?.text || "").join("\n");
         } catch(e) {
           earningsText = "テキストなし";
         }
-
+        
         let finalOutput = await askLLM(unifiedPromptTemplate(companyName, ticker5, indexSummary, indexKeywords, earningsText), false);
         summary = finalOutput.replace(/^事業要約[：:]\s*/, "").trim();
-        // If fallback occurs, there is no mainSegmentJson
       } else {
-        // Pass 2: 事業内容の深掘り
-        const embResText = await fetch(EMBED_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "bge-m3", prompt: "報告セグメント 概要 事業内容 製品 サービス" })
-        }).then(r => r.json());
+        console.log(`-> Running Pass 2 (Dynamic Query per Segment)...`);
+        const uniqueChunks = new Map<string, string>();
+        for (const segment of segmentNames) {
+            const query = `${segment} 事業内容 概要 製品 サービス`;
+            const embed = await embedOllama(EMBED_MODEL, query);
+            const searchRes = await qdrant.search('earnings_reports', {
+                vector: embed.embedding,
+                limit: 2,
+                filter: { must: [{ key: 'ticker', match: { value: ticker5 } }] }
+            });
+            for (const hit of searchRes) {
+                if (!uniqueChunks.has(String(hit.id))) uniqueChunks.set(String(hit.id), String(hit.payload?.text));
+            }
+        }
 
-        const searchResText = await qdrant.search("earnings_reports", {
-          vector: embResText.embedding,
-          limit: 3,
-          filter: { must: [{ key: "ticker", match: { value: ticker5 } }] },
-          with_payload: true
-        });
-
-        let pass2Text = searchResText.map(hit => hit.payload?.text || "").join("\n");
+        const pass2Text = Array.from(uniqueChunks.values()).join("\n\n");
+        
         let llmText2 = await askLLM(pass2PromptTemplate(segmentNames, pass2Text), true);
         llmText2 = llmText2.replace(/^```(json)?/, "").replace(/```$/, "").trim();
         
@@ -165,8 +353,10 @@ async function main() {
           console.error(`[Error] Pass 2 JSON Parse Failed for ${companyName}.`);
         }
 
+        const norm = (s: string) => String(s).replace(/\s+/g, '');
+
         const mergedSegments = segmentsData.map((s1: any) => {
-          const descObj = descriptionsData.find((s2: any) => s2.segment === s1.segment);
+          const descObj = descriptionsData.find((s2: any) => norm(s2.segment) === norm(s1.segment));
           return {
             segment: s1.segment,
             revenue: s1.revenue,
@@ -174,24 +364,26 @@ async function main() {
           };
         });
 
+        // Split into main and sub
         let maxSegment = mergedSegments[0];
         for (const s of mergedSegments) {
           const revValueS = parseInt(String(s.revenue).replace(/[^0-9]/g, "")) || 0;
           const revValueMax = parseInt(String(maxSegment.revenue).replace(/[^0-9]/g, "")) || 0;
           if (revValueS > revValueMax) maxSegment = s;
         }
+        
         let otherSegments = mergedSegments.filter((s: any) => s.segment !== maxSegment.segment);
         otherSegments.sort((a: any, b: any) => {
           const revA = parseInt(String(a.revenue).replace(/[^0-9]/g, "")) || 0;
           const revB = parseInt(String(b.revenue).replace(/[^0-9]/g, "")) || 0;
           return revB - revA;
         });
-        
-        // Keep up to 2 sub segments
-        otherSegments = otherSegments.slice(0, 2);
+        otherSegments = otherSegments.slice(0, 2); // max 2 subs
 
+        console.log(`-> Running Step 2 Unified Summary...`);
         let finalOutput = await askLLM(step2PromptTemplate(companyName, ticker5, refInfo, maxSegment, otherSegments), false);
         summary = finalOutput.replace(/^事業要約[：:]\s*/, "").trim();
+        
         mainSegmentJson = JSON.stringify(maxSegment);
         subSegmentsJson = JSON.stringify(otherSegments);
       }
@@ -201,7 +393,7 @@ async function main() {
       if (summary) {
         await db.execute({
           sql: "UPDATE equities_master SET summary = ?, main_segment = ?, sub_segments = ? WHERE ticker = ?",
-          args: [summary, mainSegmentJson || null, subSegmentsJson || null, ticker5]
+          args: [summary, mainSegmentJson || "{}", subSegmentsJson || "[]", ticker5]
         });
 
         let mainSegmentText = "";
@@ -218,11 +410,7 @@ async function main() {
         } catch (e) {}
 
         const qdrantText = `【事業要約】\n${summary}\n\n【機能的価値キーワード】\n${indexKeywords}\n\n【メイン事業】\n${mainSegmentText}\n\n【サブ事業】\n${subSegmentText}`;
-        const embedRes = await fetch(EMBED_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "bge-m3", prompt: qdrantText })
-        }).then(r => r.json());
+        const embedRes = await embedOllama(EMBED_MODEL, qdrantText);
 
         try {
           await qdrant.upsert("company_profiles", {
@@ -253,12 +441,6 @@ async function main() {
   }
 
   console.log("Batch processing complete.");
-}
-
-// Simple helper to generate a deterministic UUID-like string from a ticker
-function generateUuidForTicker(ticker: string): string {
-  const hex = Buffer.from(ticker).toString("hex").padEnd(32, "0");
-  return `${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;
 }
 
 main().catch(console.error);

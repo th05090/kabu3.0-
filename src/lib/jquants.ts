@@ -59,8 +59,9 @@ async function downloadAndProcessCsv(downloadUrl: string, onRow: (row: any) => P
   console.log(`[J-Quants] Finished processing ${count} rows.`);
 }
 
-export async function syncJQuants() {
+export async function syncJQuants(onProgress?: (msg: string) => void) {
   console.log('--- J-Quants Data Sync Started ---');
+  if (onProgress) onProgress('J-Quants Data Sync Started');
 
   try {
     // 0. 同期履歴テーブルの作成と取得 (差分同期用)
@@ -96,10 +97,12 @@ export async function syncJQuants() {
     
     finsFiles = finsFiles.filter((f: any) => !syncedKeys.has(f.Key));
     console.log(`[J-Quants] Found ${finsFiles.length} NEW financials files to process.`);
+    if (onProgress && finsFiles.length > 0) onProgress(`新しい財務データ(fins/summary) ${finsFiles.length}件を処理します...`);
     finsFiles.sort((a: any, b: any) => a.Key.localeCompare(b.Key));
 
     for (const file of finsFiles) {
       console.log(`[J-Quants] Processing Financials: ${file.Key}`);
+      if (onProgress) onProgress(`財務データ処理中: ${file.Key}`);
       const getRes = await fetchJQuants(`/v2/bulk/get?key=${file.Key}`);
       
       let batch: any[] = [];
@@ -159,11 +162,13 @@ export async function syncJQuants() {
     
     quoteFiles = quoteFiles.filter((f: any) => !syncedKeys.has(f.Key));
     console.log(`[J-Quants] Found ${quoteFiles.length} NEW daily quote files to process.`);
+    if (onProgress && quoteFiles.length > 0) onProgress(`新しい日足データ(equities/bars/daily) ${quoteFiles.length}件を処理します...`);
     quoteFiles.sort((a: any, b: any) => a.Key.localeCompare(b.Key));
 
     // ローカルSQLiteではバルク挿入が早いが、非同期で1行ずつだと遅いため、バッチ化します
     for (const file of quoteFiles) {
       console.log(`[J-Quants] Processing: ${file.Key}`);
+      if (onProgress) onProgress(`日足データ処理中: ${file.Key}`);
       const getRes = await fetchJQuants(`/v2/bulk/get?key=${file.Key}`);
       
       let batch: any[] = [];
@@ -262,10 +267,12 @@ export async function syncJQuants() {
     }
 
     console.log('[J-Quants] Calling earnings processor for new PDFs...');
+    if (onProgress) onProgress('決算PDFからのAI解析(Docling + LLM)を開始します...');
     const { processEarningsReports } = await import('./earnings_processor');
-    await processEarningsReports();
+    await processEarningsReports(onProgress);
 
     console.log('[J-Quants] Calling metrics calculator...');
+    if (onProgress) onProgress('テクニカル・ファンダメンタル指標を再計算中...');
     const { calculateAndPopulateStocks } = await import('./calculator');
     const calcResult = await calculateAndPopulateStocks();
     if (!calcResult.success) {
@@ -273,6 +280,7 @@ export async function syncJQuants() {
     }
 
     console.log('--- Sync Completed Successfully ---');
+    if (onProgress) onProgress('同期が完了しました。');
     return { success: true, message: 'Data synced successfully' };
   } catch (error: any) {
     console.error('Data Sync Failed:', error);

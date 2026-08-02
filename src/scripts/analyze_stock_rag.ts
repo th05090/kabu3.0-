@@ -72,17 +72,13 @@ async function callOllama(system: string, prompt: string): Promise<string> {
   return match ? match[1] : text;
 }
 
-async function main() {
-  const [,, prevPdfPath, latestPdfPath] = process.argv;
-  if (!prevPdfPath || !latestPdfPath) {
-    console.error("Usage: npx tsx analyze_stock_rag.ts <prev_pdf_path> <latest_pdf_path>");
-    process.exit(1);
-  }
+export async function generateAiReport(ticker: string, prevPdfPath: string, latestPdfPath: string, onProgress?: (msg: string) => void) {
+  if (onProgress) onProgress(`[AI分析] ${ticker}のアナリストレポート生成を開始します...`);
 
   try {
-    const ticker = path.basename(latestPdfPath).split('_')[0];
-    const prevMdPath = prevPdfPath.replace('.pdf', '_docling.md');
-    const latestMdPath = latestPdfPath.replace('.pdf', '_docling.md');
+    // ticker is passed directly now
+    const prevMdPath = prevPdfPath.replace('.pdf', '.md');
+    const latestMdPath = latestPdfPath.replace('.pdf', '.md');
     
     await initQdrant();
 
@@ -103,6 +99,7 @@ async function main() {
     await indexChunks(latestChunks, "latest", ticker);
 
     console.log("Retrieving highly relevant context via True Hybrid Search (RRF)...");
+    if (onProgress) onProgress(`[AI分析] RRFハイブリッド検索で過去と最新の文脈を抽出中...`);
     
     const aspects = [
       { sem: "当期の実績 経営成績 営業収益 利益", kw: "経営成績" },
@@ -148,6 +145,7 @@ ${latestContextText}
 `;
 
     console.log(`\n--- [Step 1] Asking ${LLM_MODEL} to extract facts ---`);
+    if (onProgress) onProgress(`[AI分析: 1/2] 最新決算と過去決算の事実差分を抽出中 (LLM推論)...`);
     let start = Date.now();
     const step1Result = await callOllama(STEP1_SYSTEM_PROMPT, step1Prompt);
     console.log(`Step 1 Time: ${((Date.now() - start) / 1000).toFixed(2)}s`);
@@ -194,6 +192,7 @@ ${normalizedStep1Result}
 `;
 
     console.log(`\n--- [Step 2] Asking ${LLM_MODEL} to generate analyst report ---`);
+    if (onProgress) onProgress(`[AI分析: 2/2] アナリストレポートを生成中 (LLM推論)...`);
     start = Date.now();
     const step2Result = await callOllama(STEP2_SYSTEM_PROMPT, step2Prompt);
     console.log(`Step 2 Time: ${((Date.now() - start) / 1000).toFixed(2)}s`);
@@ -201,11 +200,13 @@ ${normalizedStep1Result}
     const outPath = path.join(__dirname, "..", "data", `${ticker}_ai_report.json`);
     await fs.writeFile(outPath, step2Result, "utf8");
     console.log(`Saved final result to ${outPath}`);
+    if (onProgress) onProgress(`[AI分析] レポート生成完了: ${outPath}`);
+    return true;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error during Hybrid RAG analysis:", error);
-    process.exit(1);
+    if (onProgress) onProgress(`[AI分析エラー] ${error.message}`);
+    return false;
   }
 }
 
-main();

@@ -1,22 +1,43 @@
 import { NextResponse } from 'next/server';
 import { syncJQuants } from '@/lib/jquants';
 
-export async function POST() {
-  try {
-    // 実際の実装では非同期でバッチ処理をキックしてすぐレスポンスを返すか、
-    // Vercel等のタイムアウトを考慮してキューイングする仕組みが必要ですが、
-    // 今回はローカル実行・検証用として直接 await で実行します。
-    
-    // 現在は最新の1ファイルのみ取得するため数秒で完了します。
-    const result = await syncJQuants();
+export const dynamic = 'force-dynamic';
 
-    if (result.success) {
-      return NextResponse.json({ message: 'Sync completed successfully' });
-    } else {
-      return NextResponse.json({ error: result.error }, { status: 500 });
+export async function POST() {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const sendEvent = (data: any) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+      };
+
+      try {
+        const onProgress = (msg: string) => {
+          sendEvent({ type: 'progress', message: msg });
+        };
+
+        const result = await syncJQuants(onProgress);
+
+        if (result.success) {
+          sendEvent({ type: 'done', message: 'Sync completed successfully' });
+        } else {
+          sendEvent({ type: 'error', message: result.error });
+        }
+      } catch (error: any) {
+        console.error('API Error:', error);
+        sendEvent({ type: 'error', message: error.message });
+      } finally {
+        controller.close();
+      }
     }
-  } catch (error: any) {
-    console.error('API Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  });
+
+  return new NextResponse(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+    },
+  });
 }

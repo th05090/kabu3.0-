@@ -8,13 +8,14 @@ import { promisify } from 'util';
 import { scrapeIRBank } from '../scripts/fetch_pdf';
 import { askLLM, pass1PromptTemplate, pass2PromptTemplate } from '../scripts/rag/theme_prompts';
 import { reclassifyGics } from './gics';
+import { generateAiReport } from '../scripts/analyze_stock_rag';
 
 const execAsync = promisify(exec);
 const db = createClient({ url: process.env.DATABASE_URL || 'file:local.db' });
 const qdrant = new QdrantClient({ host: 'localhost', port: 6333 });
 const EMBED_URL = "http://localhost:11434/api/embeddings";
 
-export async function processEarningsReports(targetTicker?: string) {
+export async function processEarningsReports(onProgress?: (msg: string) => void, targetTicker?: string) {
   console.log("--- Starting Earnings PDF Processing ---");
 
   // Fetch tickers that have newly updated earnings_date
@@ -55,10 +56,12 @@ export async function processEarningsReports(targetTicker?: string) {
     }
 
     console.log(`\n[*] New Earnings Detected for ${row.name} (${ticker}) on ${date}`);
+    if (onProgress) onProgress(`[${processedCount+1}] 新規決算を処理中: ${row.name} (${ticker})...`);
 
     try {
       // 1. Fetch PDF
       console.log(`  [1/5] Fetching PDF from IR BANK...`);
+      if (onProgress) onProgress(`[${processedCount+1}/1] PDFダウンロード中...`);
       const ticker4 = ticker.substring(0, 4);
       await scrapeIRBank(ticker4, date);
 
@@ -75,15 +78,18 @@ export async function processEarningsReports(targetTicker?: string) {
 
       // 2. Docling to MD
       console.log(`  [2/5] Converting PDF to Markdown (Docling)...`);
+      if (onProgress) onProgress(`[${processedCount+1}/2] PDF解析中 (Docling)...`);
       await execAsync(`python src/scripts/pdf_to_md_docling.py "${pdfPath}" "${mdPath}"`);
 
       // 3. Embed to Qdrant
       console.log(`  [3/5] Embedding Markdown into Qdrant...`);
+      if (onProgress) onProgress(`[${processedCount+1}/3] Qdrantへベクトル登録中...`);
       // Warning: embed_markdown expects <ticker> <period>, we can just pass date as period
       await execAsync(`npx tsx src/scripts/embed_markdown.ts ${ticker} ${date}`);
 
       // 4. RAG Extraction
       console.log(`  [4/5] Extracting Segment Info via RAG (Gemma 3)...`);
+      if (onProgress) onProgress(`[${processedCount+1}/4] AI決算解析中 (Gemma 3)...`);
 
       let pass1Text = "";
       try {
@@ -214,11 +220,51 @@ export async function processEarningsReports(targetTicker?: string) {
         const gicsResult = await reclassifyGics(ticker);
         if (gicsResult.success) {
           console.log(`  => Successfully reclassified GICS: ${gicsResult.theme}`);
+          if (onProgress) onProgress(`[${processedCount+1}/5] GICS再判定完了: ${gicsResult.theme}`);
         } else {
           console.error(`  => Failed to reclassify GICS: ${gicsResult.error}`);
         }
       } else {
         console.log(`  [5/5] Segment unchanged. No GICS reclassification needed.`);
+      }
+
+      // 6. AI Analyst Report
+      console.log(`  [6/6] Generating AI Analyst Report...`);
+      if (onProgress) onProgress(`[${processedCount+1}/6] 過去決算との差分分析(AIアナリストレポート生成)を準備中...`);
+      
+      const datesRes = await db.execute({
+        sql: 'SELECT date FROM financials WHERE ticker = ? ORDER BY date DESC LIMIT 2',
+        args: [ticker]
+      });
+      
+      let prevDate = date;
+      if (datesRes.rows.length > 1) {
+        prevDate = String(datesRes.rows[1].date);
+      }
+
+      const prevPdfPath = path.join(tickerPdfDir, `${ticker}_${prevDate}.pdf`);
+      
+      // If previous PDF doesn't exist, fetch and parse it
+      if (!existsSync(prevPdfPath) && prevDate !== date) {
+        console.log(`  => Previous PDF not found. Fetching for ${prevDate}...`);
+        if (onProgress) onProgress(`[${processedCount+1}] 比較用（前回）の決算PDFを補完ダウンロード中...`);
+        const ticker4 = ticker.substring(0, 4);
+        await scrapeIRBank(ticker4, prevDate);
+        const fetchedPrevPdf = path.join(process.cwd(), 'data', 'pdfs', ticker4, `${ticker4}_${prevDate}.pdf`);
+        
+        if (existsSync(fetchedPrevPdf)) {
+          await fs.rename(fetchedPrevPdf, prevPdfPath);
+          console.log(`  => Converting prev PDF to Markdown...`);
+          if (onProgress) onProgress(`[${processedCount+1}] 比較用PDFをMarkdownにパース中 (Docling)...`);
+          const prevMdPath = path.join(tickerPdfDir, `${ticker}_${prevDate}.md`);
+          await execAsync(`python src/scripts/pdf_to_md_docling.py "${prevPdfPath}" "${prevMdPath}"`);
+        }
+      }
+
+      if (existsSync(prevPdfPath) && existsSync(pdfPath)) {
+        await generateAiReport(ticker, prevPdfPath, pdfPath, onProgress);
+      } else {
+        console.log(`  => Cannot generate AI report. Missing PDFs.`);
       }
 
       processedCount++;

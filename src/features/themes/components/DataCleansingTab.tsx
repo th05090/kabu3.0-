@@ -80,8 +80,8 @@ export function DataCleansingTab() {
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>データクレンジング (異常検知)</h2>
             <p style={{ fontSize: '0.875rem', color: '#888' }}>
-              東証業種とGICS大分類が乖離している銘柄や、Qdrantでの分類スコアが低い（0.65未満）銘柄を抽出しています。
-              <br/>要約やキーワードを修正し「再判定」ボタンを押すことで、ベクトルが再計算されGICSが再分類されます。
+              LLM監査により、企業の実態とGICS分類定義の間に明白な矛盾（ねじれ）があると判定された「外れ値（異常）」銘柄をリストアップしています。
+              <br/>事業要約やキーワードを修正して「保存」後、再判定バッチを回してください。
             </p>
           </div>
           <div className="theme-flex-gap">
@@ -107,9 +107,9 @@ export function DataCleansingTab() {
             <table className="stock-table" style={{ width: '100%', minWidth: '800px' }}>
               <thead>
                 <tr>
-                  <th style={{ width: '200px', minWidth: '200px' }}>銘柄</th>
-                  <th style={{ width: '250px', minWidth: '250px' }}>検知理由</th>
-                  <th style={{ width: '200px', minWidth: '200px' }}>東証業種 / GICS分類 (Score)</th>
+                  <th style={{ width: '250px', minWidth: '250px' }}>銘柄</th>
+                  <th style={{ width: '250px', minWidth: '250px' }}>東証業種 / GICS分類</th>
+                  <th style={{ width: '300px', minWidth: '300px' }}>異常の理由 (LLM判定)</th>
                   <th style={{ minWidth: '300px' }}>要約 & キーワード</th>
                   <th style={{ width: '100px' }}>操作</th>
                 </tr>
@@ -117,6 +117,11 @@ export function DataCleansingTab() {
               <tbody>
                 {anomalies.map((a, i) => {
                   const isEditing = editingTicker === a.ticker;
+                  
+                  // Color code the score: below 0.8 is red, below 0.83 is orange
+                  const score = Number(a.gics_similarity_score);
+                  const scoreColor = score < 0.8 ? 'var(--red)' : score < 0.83 ? 'orange' : 'var(--primary)';
+                  
                   return (
                     <tr key={i} style={{ verticalAlign: 'top' }}>
                       <td style={{ fontWeight: '500', paddingTop: '0.75rem', whiteSpace: 'normal' }}>
@@ -125,14 +130,13 @@ export function DataCleansingTab() {
                         </Link>
                       </td>
                       <td style={{ paddingTop: '0.75rem', whiteSpace: 'normal' }}>
-                        <ul className="anomaly-list" style={{ whiteSpace: 'normal' }}>
-                          {a.reasons.map((r: string, idx: number) => <li key={idx}>{r}</li>)}
-                        </ul>
-                      </td>
-                      <td style={{ paddingTop: '0.75rem', whiteSpace: 'normal' }}>
                         <div style={{ color: '#888', fontSize: '0.75rem', marginBottom: '0.25rem' }}>東証: {a.industry}</div>
                         <div style={{ fontWeight: '500' }}>GICS: {a.theme}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>Score: {Number(a.gics_similarity_score).toFixed(3)}</div>
+                      </td>
+                      <td style={{ paddingTop: '0.75rem', whiteSpace: 'normal' }}>
+                        <div style={{ fontSize: '0.875rem', color: 'var(--red)', whiteSpace: 'pre-wrap' }}>
+                          {a.reasons ? a.reasons[0] : '-'}
+                        </div>
                       </td>
                       <td style={{ paddingTop: '0.75rem', whiteSpace: 'normal' }}>
                         {isEditing ? (

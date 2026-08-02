@@ -211,8 +211,7 @@ ${themeListText}`;
       for (const c of stage2Candidates) {
         themeListText2 += `"${c.name}", "description": "${c.description}"\n`;
       }
-      
-      const prompt2 = `以下の3つの候補の中から、「${companyName}」の事業内容に最も一致するテーマを厳密に1つ選び、テーマ名のみ回答してください。\n\n企業名：${ticker} ${companyName}\n事業要約：${summary}\n機能的価値 キーワード：\n${keywords}\n\n【メイン事業セクション】\n${mainSegmentJson}\n\n【サブ事業セクション】\n${subSegmentsJson}\n\nテーマリスト\n${themeListText2}`;
+      const prompt2 = `以下の3つの候補の中から、「${companyName}」の事業内容に最も一致するテーマを1つ選び、テーマ名のみ回答してください。\n\n企業名：${ticker} ${companyName}\n事業要約：${summary}\n機能的価値 キーワード：\n${keywords}\n\n【メイン事業セクション】\n${mainSegmentJson}\n\n【サブ事業セクション】\n${subSegmentsJson}\n\nテーマリスト\n${themeListText2}`;
 
       try {
         const llmAnswer2 = await askRerankLLM(prompt2);
@@ -230,13 +229,63 @@ ${themeListText}`;
       }
     }
 
+    // --- Stage 3: LLM Audit (Continuous Anomaly Detection) ---
+    const finalGicsInfo = allGicsInfo.find((c: any) => c.id === finalGicsId);
+    const finalGicsName = finalGicsInfo?.name || "不明";
+    const finalGicsDescription = finalGicsInfo?.description || "説明なし";
+
+    const prompt3 = `あなたは厳格なGICS分類の監査役です。
+企業の実態とGICS分類の間に矛盾がないか監査してください。
+
+企業情報:
+${companyName}
+
+事業要約: 
+${summary || '情報なし'}
+メイン事業：${mainSegmentJson || '情報なし'}
+サブ事業：${subSegmentsJson || '情報なし'}
+
+判定されたGICS細分類: 
+${finalGicsName}
+判定されたGICS細分類の説明：
+${finalGicsDescription}
+
+判定を出す前に、必ず以下の【ステップ1】を埋めてから、【ステップ2】を出力してください。
+
+【ステップ1：属性の強制言語化】
+
+提供価値： [物理的なモノ / デジタル・データ / 人的サービス] のどれか
+
+顧客対象： [BtoB（企業向け） / BtoC（一般消費者向け）] のどちらか
+
+ビジネス形態： [開発・製造 / 流通・小売り / インフラ提供] のどれか
+
+【ステップ2：矛盾判定】
+ステップ1で書き出した企業の実態と、判定されたGICS細分類の説明を比較し、明確な矛盾（ねじれ）があれば [ERROR] と理由を、妥当であれば [OK] を出力してください。`;
+
+    let auditStatus = 'OK';
+    let auditReason = '';
+    try {
+      const llmAnswer3 = await askRerankLLM(prompt3);
+      if (llmAnswer3.includes('[ERROR]')) {
+        auditStatus = 'ERROR';
+        auditReason = llmAnswer3;
+      } else {
+        auditStatus = 'OK';
+        auditReason = llmAnswer3;
+      }
+    } catch(e) {
+      console.error(`[GICS] Audit failed for ${ticker}`, e);
+      auditStatus = 'OK';
+    }
+
     // Save to DB
     await db.execute({
-      sql: "UPDATE equities_master SET theme = ?, gics_sub_industry_id = ? WHERE ticker = ?",
-      args: [finalGicsSector, finalGicsId, ticker]
+      sql: "UPDATE equities_master SET theme = ?, gics_sub_industry_id = ?, gics_audit_status = ?, gics_audit_reason = ? WHERE ticker = ?",
+      args: [finalGicsSector, finalGicsId, auditStatus, auditReason, ticker]
     });
     
-    console.log(`[GICS] Successfully updated ${ticker} to ${finalGicsId} (${finalGicsSector})`);
+    console.log(`[GICS] Successfully updated ${ticker} to ${finalGicsId} (${finalGicsSector}) [Audit: ${auditStatus}]`);
 
     return { success: true, gics_sub_industry_id: finalGicsId, theme: finalGicsSector };
   } catch (e: any) {

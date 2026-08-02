@@ -51,14 +51,16 @@ async function main() {
 
   // Fetch targets
   const targetsResult = await db.execute(`
-    SELECT ticker, name, industry, summary, theme_keywords, main_segment, sub_segments
+    SELECT ticker, name, industry, summary, theme_keywords, main_segment, sub_segments, gics_sub_industry_id
     FROM equities_master 
     WHERE summary IS NOT NULL 
+      AND name NOT LIKE '%上場信託%'
       AND name NOT LIKE '%ETF%'
       AND name NOT LIKE '%ETN%'
-      AND name NOT LIKE '%REIT%'
+      AND name NOT LIKE '%ＥＴＮ%'
       AND name NOT LIKE '%投資法人%'
-      AND name NOT LIKE '%証券投資%'
+      AND name NOT LIKE '%リート%'
+      AND name NOT LIKE '%上場投信%'
       AND name NOT LIKE '%ファンド%'
       AND name NOT LIKE '%ＥＴＦ%'
   `);
@@ -80,6 +82,9 @@ async function main() {
   let successCount = 0;
   let failCount = 0;
 
+  const diffLogFile = path.join(process.cwd(), 'gics_diff.csv');
+  await fs.writeFile(diffLogFile, 'ticker,name,old_gics,new_gics\n', 'utf8');
+
   for (let i = 0; i < targets.length; i++) {
     const t = targets[i];
     const ticker = String(t.ticker);
@@ -89,6 +94,7 @@ async function main() {
     const keywords = String(t.theme_keywords || "");
     const mainSegmentJson = t.main_segment ? String(t.main_segment) : "情報なし";
     const subSegmentsJson = t.sub_segments ? String(t.sub_segments) : "[]";
+    const oldGicsId = t.gics_sub_industry_id ? String(t.gics_sub_industry_id) : "";
 
     console.log(`\n[${i+1}/${targets.length}] Processing ${companyName} (${ticker})`);
 
@@ -236,8 +242,7 @@ ${themeListText}`;
         for (const c of stage2Candidates) {
           themeListText2 += `"${c.name}", "description": "${c.description}"\n`;
         }
-        
-        const prompt2 = `以下の3つの候補の中から、「${companyName}」の事業内容に最も一致するテーマを厳密に1つ選び、テーマ名のみ回答してください。\n\n企業名：${ticker} ${companyName}\n事業要約：${summary}\n機能的価値 キーワード：\n${keywords}\n\n【メイン事業セクション】\n${mainSegmentJson}\n\n【サブ事業セクション】\n${subSegmentsJson}\n\nテーマリスト\n${themeListText2}`;
+        const prompt2 = `以下の3つの候補の中から、「${companyName}」の事業内容に最も一致するテーマを1つ選び、テーマ名のみ回答してください。\n\n企業名：${ticker} ${companyName}\n事業要約：${summary}\n機能的価値 キーワード：\n${keywords}\n\n【メイン事業セクション】\n${mainSegmentJson}\n\n【サブ事業セクション】\n${subSegmentsJson}\n\nテーマリスト\n${themeListText2}`;
 
         try {
           const llmAnswer2 = await askRerankLLM(prompt2);
@@ -256,6 +261,13 @@ ${themeListText}`;
           finalGicsId = stage2Candidates[0].id;
           finalGicsSector = stage2Candidates[0].sector;
         }
+      }
+
+      // Check diff
+      if (oldGicsId && oldGicsId !== finalGicsId) {
+        const oldGicsName = allGicsInfo.find((i: any) => i.id === oldGicsId)?.name || oldGicsId;
+        const newGicsName = allGicsInfo.find((i: any) => i.id === finalGicsId)?.name || finalGicsId;
+        await fs.appendFile(diffLogFile, `${ticker},${companyName},${oldGicsName},${newGicsName}\n`, 'utf8');
       }
 
       // Save to DB

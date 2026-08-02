@@ -38,32 +38,3 @@ export const TSE_TO_GICS_MAPPING: Record<string, string[]> = {
   "サービス業": ["コミュニケーション・サービス", "一般消費財・サービス", "資本財・サービス", "情報技術", "ヘルスケア", "金融", "不動産"]
 };
 
-/**
- * 異常検知ロジック
- * @param tseIndustry 東証33業種名
- * @param gicsSectorName GICS大分類（セクター名）
- * @param gicsScore Qdrantの類似度スコア
- * @returns { isAnomaly: boolean, reasons: string[] }
- */
-export function detectAnomalies(tseIndustry: string, gicsSectorName: string, gicsScore: number) {
-  const reasons: string[] = [];
-
-  // 1. 低スコア検知 (閾値: 0.65)
-  // bge-m3等のCosine類似度では、0.65未満はかなり関連性が薄い場合が多い
-  if (gicsScore < 0.65) {
-    reasons.push(`類似度スコアが低いです（Score: ${gicsScore.toFixed(3)}）。分類結果に自信がありません。`);
-  }
-
-  // 2. 業種乖離検知
-  if (tseIndustry && gicsSectorName) {
-    const allowedSectors = TSE_TO_GICS_MAPPING[tseIndustry];
-    if (allowedSectors && !allowedSectors.includes(gicsSectorName)) {
-      reasons.push(`東証業種「${tseIndustry}」に対して、GICS分類「${gicsSectorName}」は乖離している可能性があります。`);
-    }
-  }
-
-  return {
-    isAnomaly: reasons.length > 0,
-    reasons,
-  };
-}
