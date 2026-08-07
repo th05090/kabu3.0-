@@ -8,8 +8,15 @@ export async function POST() {
 
   const stream = new ReadableStream({
     async start(controller) {
+      let isClosed = false;
       const sendEvent = (data: any) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        if (isClosed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        } catch (e) {
+          isClosed = true;
+          console.log("Client disconnected or stream closed.");
+        }
       };
 
       try {
@@ -28,8 +35,15 @@ export async function POST() {
         console.error('API Error:', error);
         sendEvent({ type: 'error', message: error.message });
       } finally {
-        controller.close();
+        if (!isClosed) {
+          try {
+            controller.close();
+          } catch (e) {}
+        }
       }
+    },
+    cancel() {
+      console.log("Stream canceled by client");
     }
   });
 

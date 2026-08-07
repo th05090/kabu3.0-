@@ -4,9 +4,10 @@ import React, { useState } from 'react';
 import { ThemeSearchTab } from './ThemeSearchTab';
 import { CustomThemesTab } from './CustomThemesTab';
 import { DataCleansingTab } from './DataCleansingTab';
+import { IRNewsTab } from './IRNewsTab';
 
 export function ThemeDiscoveryLayout() {
-  const [activeTab, setActiveTab] = useState<'search' | 'custom' | 'cleansing'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'custom' | 'cleansing' | 'irnews'>('search');
 
   return (
     <div className="theme-layout">
@@ -33,12 +34,19 @@ export function ThemeDiscoveryLayout() {
         >
           データクレンジング
         </button>
+        <button
+          className={`theme-tab-btn ${activeTab === 'irnews' ? 'active' : ''}`}
+          onClick={() => setActiveTab('irnews')}
+        >
+          IRニュース
+        </button>
       </div>
 
       <div className="theme-content">
         {activeTab === 'search' && <ThemeSearchTab />}
         {activeTab === 'custom' && <CustomThemesTab />}
         {activeTab === 'cleansing' && <DataCleansingTab />}
+        {activeTab === 'irnews' && <IRNewsTab />}
       </div>
     </div>
   );

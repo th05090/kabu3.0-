@@ -76,6 +76,11 @@ export async function calculateAndPopulateStocks() {
         SELECT 
           f1.*,
           (
+            SELECT SUM(f3.eps)
+            FROM LatestFinancialsRaw f3
+            WHERE f3.ticker = f1.ticker AND f3.rn <= 4
+          ) as ttm_eps,
+          (
             SELECT date 
             FROM financials f2 
             WHERE f2.ticker = f1.ticker 
@@ -264,7 +269,7 @@ export async function calculateAndPopulateStocks() {
         ((met.min_low_200 - met.max_high_200) / NULLIF(met.max_high_200, 0) * 100) as max_drawdown,
         
         -- Valuation & Financials
-        (met.current_price / NULLIF(fin.eps, 0)) as per,
+        (met.current_price / NULLIF(fin.ttm_eps, 0)) as per,
         (met.current_price / NULLIF((fin.equity * 1000000 / fin.shares_outstanding), 0)) as pbr,
         (fin.profit / NULLIF(fin.equity, 0) * 100) as roe,
         (fin.profit / NULLIF(fin.total_assets, 0) * 100) as roa

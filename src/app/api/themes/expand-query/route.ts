@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     }
 
     const prompt = `「${query}」という株式テーマに関連する具体的な事業内容や関連キーワードを、日本語でカンマ区切りで10個挙げてください。解説は一切不要です。`;
-    const model = 'gemma3:12b'; // We can make this configurable later if needed
+    const model = 'gemma4:12b'; // We can make this configurable later if needed
 
     const res = await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST',

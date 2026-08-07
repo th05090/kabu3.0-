@@ -10,7 +10,7 @@ const db = createClient({
   url: process.env.DATABASE_URL || 'file:local.db',
 });
 
-async function fetchJQuants(path: string, options: RequestInit = {}) {
+export async function fetchJQuants(path: string, options: RequestInit = {}) {
   const url = `${BASE_URL}${path}`;
   const apiKey = process.env.JQUANTS_API_KEY;
   if (!apiKey) throw new Error('JQUANTS_API_KEY is not set');
@@ -30,7 +30,7 @@ async function fetchJQuants(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
-async function downloadAndProcessCsv(downloadUrl: string, onRow: (row: any) => Promise<void>) {
+export async function downloadAndProcessCsv(downloadUrl: string, onRow: (row: any) => Promise<void>) {
   const res = await fetch(downloadUrl);
   if (!res.ok) throw new Error(`Download failed: ${res.statusText}`);
   if (!res.body) throw new Error('No body in response');
@@ -83,8 +83,8 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
       
       await downloadAndProcessCsv(getRes.url, async (row) => {
         await db.execute({
-          sql: `INSERT OR REPLACE INTO equities_master (ticker, name, market, industry, last_updated) VALUES (?, ?, ?, ?, ?)`,
-          args: [row.Code, row.CoName, row.MktNm, row.S17Nm || row.S33Nm || '', new Date().toISOString()]
+          sql: `INSERT INTO equities_master (ticker, name, market, industry, last_updated) VALUES (?, ?, ?, ?, ?) ON CONFLICT(ticker) DO UPDATE SET name=excluded.name, market=excluded.market, industry=excluded.industry, last_updated=excluded.last_updated`,
+          args: [row.Code, row.CoName, row.MktNm, row.S33Nm || row.S17Nm || '', new Date().toISOString()]
         });
       });
     }
@@ -270,6 +270,16 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
     if (onProgress) onProgress('決算PDFからのAI解析(Docling + LLM)を開始します...');
     const { processEarningsReports } = await import('./earnings_processor');
     await processEarningsReports(onProgress);
+
+    console.log('[J-Quants] Fetching IR News (Global Phase)...');
+    if (onProgress) onProgress('過去5日分のIRニュースを検索・取得しています...');
+    const { fetchAllIRNewsGlobal } = await import('../scripts/fetch_ir_news');
+    await fetchAllIRNewsGlobal(5);
+
+    console.log('[J-Quants] Processing IR News (Individual Phase)...');
+    if (onProgress) onProgress('IRニュースのAI解析とベクトル更新を行っています...');
+    const { processIrNews } = await import('../scripts/analyze_ir_news');
+    await processIrNews(onProgress);
 
     console.log('[J-Quants] Calling metrics calculator...');
     if (onProgress) onProgress('テクニカル・ファンダメンタル指標を再計算中...');
