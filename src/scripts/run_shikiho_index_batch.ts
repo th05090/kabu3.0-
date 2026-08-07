@@ -3,7 +3,7 @@ import { createClient } from "@libsql/client";
 
 const DB_URL = "file:local.db";
 const OLLAMA_URL = "http://localhost:11434/api/generate";
-const DATA_PATH = "scratch/shikiho_company_profiles.json";
+const DATA_PATH = "src/data/shikiho_company_profiles.json";
 
 async function main() {
   const db = createClient({ url: DB_URL });
@@ -71,7 +71,7 @@ ${t.feature_text}`;
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "gemma3:12b",
+          model: "gemma4:12b",
           prompt: prompt,
           stream: false,
           format: "json", // Enforce JSON

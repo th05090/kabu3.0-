@@ -35,10 +35,11 @@ async function downloadPdf(url: string, outputPath: string) {
   console.log(`Saved PDF to: ${outputPath} (${buffer.length} bytes)`);
 }
 
-export async function scrapeIRBank(ticker: string, dateStr: string = 'latest') {
+export async function scrapeIRBank(fullTicker: string, dateStr: string = 'latest') {
   try {
-    const listUrl = `https://irbank.net/${ticker}/ir`;
-    console.log(`[1] Fetching IR list for ${ticker}: ${listUrl}`);
+    const ticker4 = fullTicker.substring(0, 4);
+    const listUrl = `https://irbank.net/${ticker4}/ir`;
+    console.log(`[1] Fetching IR list for ${fullTicker} (IR Bank: ${ticker4}): ${listUrl}`);
     const listHtml = await fetchHtml(listUrl);
     const $list = cheerio.load(listHtml);
 
@@ -61,7 +62,7 @@ export async function scrapeIRBank(ticker: string, dateStr: string = 'latest') {
     });
 
     if (!targetDetailUrl) {
-      console.log(`No valid '決算短信' found for ${ticker} on IR BANK.`);
+      console.log(`No valid '決算短信' found for ${fullTicker} on IR BANK.`);
       return;
     }
 
@@ -93,20 +94,40 @@ export async function scrapeIRBank(ticker: string, dateStr: string = 'latest') {
 
     console.log(`[3] Found PDF URL: ${pdfUrl}`);
 
-    // Create pdfs/[ticker] directory if not exists
-    const tickerPdfDir = path.join(process.cwd(), 'data', 'pdfs', ticker);
+    // Create pdfs/[fullTicker] directory if not exists
+    const tickerPdfDir = path.join(process.cwd(), 'data', 'pdfs', fullTicker);
     await fs.mkdir(tickerPdfDir, { recursive: true });
 
-    const outputPath = path.join(tickerPdfDir, `${ticker}_${dateStr}.pdf`);
+    // Extract actual date from IR Bank ID (e.g. 140120260417505829 -> 2026-04-17)
+    let actualDate = dateStr;
+    const dateMatch = targetDetailUrl.match(/\d{4}(\d{8})/);
+    if (dateMatch) {
+      const rawDate = dateMatch[1]; // 20260417
+      const yyyy = rawDate.slice(0, 4);
+      const mm = rawDate.slice(4, 6);
+      const dd = rawDate.slice(6, 8);
+      actualDate = `${yyyy}-${mm}-${dd}`;
+    }
+
+    const outputPath = path.join(tickerPdfDir, `${fullTicker}_${actualDate}.pdf`);
     
-    console.log(`[4] Downloading PDF...`);
+    // Check if it already exists
+    try {
+      await fs.access(outputPath);
+      console.log(`[4] PDF already exists at ${outputPath}. Skipping download.`);
+      return outputPath;
+    } catch {
+      // File doesn't exist, proceed to download
+    }
+
+    console.log(`[4] Downloading PDF to ${outputPath}...`);
     await downloadPdf(pdfUrl, outputPath);
     
-    console.log(`Success! PDF for ${ticker} successfully downloaded.`);
+    console.log(`Success! PDF for ${fullTicker} successfully downloaded.`);
 
     return outputPath;
   } catch (err: any) {
-    console.error(`Error processing ${ticker}:`, err.message);
+    console.error(`Error processing ${fullTicker}:`, err.message);
     throw err;
   }
 }

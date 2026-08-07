@@ -7,7 +7,7 @@ const COLLECTION_NAME = 'earnings_reports';
 const EMBEDDING_MODEL = 'bge-m3';
 
 // Models to compare
-const MODELS = ['qwen2.5:14b-instruct-q6_K', 'gemma3:12b'];
+const MODELS = ['qwen2.5:14b-instruct-q6_K', 'gemma4:12b'];
 
 async function getEmbedding(text: string): Promise<number[]> {
   const response = await fetch('http://localhost:11434/api/embeddings', {

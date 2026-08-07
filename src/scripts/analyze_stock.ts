@@ -67,7 +67,7 @@ ${latestTruncated}
 ${prompt}
 `;
 
-    const modelName = process.argv[4] || 'gemma3:12b';
+    const modelName = process.argv[4] || 'gemma4:12b';
     // Step 4: Ask LLM
     console.log(`Asking ${modelName}...`);
     const t0 = Date.now();

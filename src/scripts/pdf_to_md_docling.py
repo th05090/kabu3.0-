@@ -6,21 +6,24 @@ from docling.datamodel.base_models import InputFormat
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: python pdf_to_md_docling.py <input_pdf_path> <output_md_path>")
+        print("Usage: python pdf_to_md_docling.py <input_pdf_path> <output_md_path> [--cpu]")
         sys.exit(1)
         
     pdf_path = sys.argv[1]
     output_path = sys.argv[2]
+    
+    use_cpu = "--cpu" in sys.argv
     
     if not os.path.exists(pdf_path):
         print(f"Error: File not found: {pdf_path}")
         sys.exit(1)
         
     try:
-        print(f"Converting {pdf_path} to Markdown using Docling (CUDA)...")
+        device_str = "CPU" if use_cpu else "CUDA"
+        print(f"Converting {pdf_path} to Markdown using Docling ({device_str})...")
         
         pipeline_options = PdfPipelineOptions()
-        pipeline_options.accelerator_options.device = "cuda"
+        pipeline_options.accelerator_options.device = "cpu" if use_cpu else "cuda"
         
         converter = DocumentConverter(
             allowed_formats=[InputFormat.PDF],
@@ -30,6 +33,12 @@ def main():
         )
         
         result = converter.convert(pdf_path)
+
+        if result.errors:
+            print(f"Docling encountered internal errors: {result.errors}")
+            if not use_cpu:
+                sys.exit(2) # Code 2 tells the pipeline to fallback to CPU
+
         markdown_text = result.document.export_to_markdown()
         
         with open(output_path, 'w', encoding='utf-8') as f:
