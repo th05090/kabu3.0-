@@ -72,24 +72,35 @@ export default async function StockAnalysisPage({ params }: PageProps) {
   const equitiesData = equities ? mapRow(equities) : null;
   const shikihoData = shikiho ? mapRow(shikiho) : null;
 
-  // 4. Fetch AI Report if exists
+  // 4. Fetch AI Report from DB
   let aiReportData = null;
   try {
-    // Check exact ticker (e.g., 72030_ai_report.json)
-    let reportPath = path.join(process.cwd(), 'src', 'data', `${ticker}_ai_report.json`);
+    const aiReportResult = await db.execute({
+      sql: 'SELECT current_performance, future_guidance, report_comparison, ai_comment FROM ai_reports WHERE ticker = ?',
+      args: [ticker]
+    });
     
-    // Fallback for J-Quants 5-digit ticker (e.g., 72030 -> 7203_ai_report.json)
-    if (!fs.existsSync(reportPath) && ticker.length > 4) {
+    // Fallback for J-Quants 5-digit ticker (e.g., 72030 -> 7203)
+    let finalResult = aiReportResult;
+    if (finalResult.rows.length === 0 && ticker.length > 4) {
       const baseTicker = ticker.slice(0, 4);
-      reportPath = path.join(process.cwd(), 'src', 'data', `${baseTicker}_ai_report.json`);
+      finalResult = await db.execute({
+        sql: 'SELECT current_performance, future_guidance, report_comparison, ai_comment FROM ai_reports WHERE ticker = ?',
+        args: [baseTicker]
+      });
     }
 
-    if (fs.existsSync(reportPath)) {
-      const fileContent = fs.readFileSync(reportPath, 'utf8');
-      aiReportData = JSON.parse(fileContent);
+    if (finalResult.rows.length > 0) {
+      const row = finalResult.rows[0];
+      aiReportData = {
+        current_performance: row.current_performance,
+        future_guidance: row.future_guidance,
+        report_comparison: row.report_comparison,
+        ai_comment: row.ai_comment
+      };
     }
   } catch (err) {
-    console.error('Failed to read AI report:', err);
+    console.error('Failed to read AI report from DB:', err);
   }
 
   return (

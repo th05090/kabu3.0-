@@ -2,8 +2,13 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { headerAwareChunker } from './rag/chunker';
 import { initQdrant, indexChunks, retrieveHybrid, qdrant, COLLECTION_NAME } from './rag/qdrant';
+import { createClient } from '@libsql/client';
 
-const LLM_MODEL = "gemma3:12b";
+const db = createClient({
+  url: process.env.DATABASE_URL || 'file:local.db',
+});
+
+const LLM_MODEL = "gemma4:12b";
 
 // --- Step 1 Prompt ---
 const STEP1_SYSTEM_PROMPT = `あなたは無機質なデータ転記ボットです。推論、要約、単位変換を一切行わず、提供されたテキストから事実のみを抽出してください。
@@ -77,17 +82,27 @@ export async function generateAiReport(ticker: string, prevPdfPath: string, late
 
   try {
     // ticker is passed directly now
-    const prevMdPath = prevPdfPath.replace('.pdf', '.md');
+    let prevMdPath = "";
+    if (prevPdfPath) {
+      prevMdPath = prevPdfPath.replace('.pdf', '.md');
+    }
     const latestMdPath = latestPdfPath.replace('.pdf', '.md');
     
     await initQdrant();
 
     console.log("Loading markdown files...");
-    const prevMd = await fs.readFile(prevMdPath, "utf8");
+    let prevMd = "";
+    if (prevMdPath) {
+      try {
+        prevMd = await fs.readFile(prevMdPath, "utf8");
+      } catch (e) {
+        console.log(`No previous markdown found at ${prevMdPath}, running single analysis.`);
+      }
+    }
     const latestMd = await fs.readFile(latestMdPath, "utf8");
     
     // Header-Aware Chunking (Avoids breaking tables and keeps sections grouped)
-    const prevChunks = headerAwareChunker(prevMd, 2500);
+    const prevChunks = prevMd ? headerAwareChunker(prevMd, 2500) : [];
     const latestChunks = headerAwareChunker(latestMd, 2500);
     
     // Cleanup old data for this ticker
@@ -95,7 +110,9 @@ export async function generateAiReport(ticker: string, prevPdfPath: string, late
       filter: { must: [{ key: "ticker", match: { value: ticker } }] }
     });
 
-    await indexChunks(prevChunks, "prev", ticker);
+    if (prevChunks.length > 0) {
+      await indexChunks(prevChunks, "prev", ticker);
+    }
     await indexChunks(latestChunks, "latest", ticker);
 
     console.log("Retrieving highly relevant context via True Hybrid Search (RRF)...");
@@ -112,9 +129,11 @@ export async function generateAiReport(ticker: string, prevPdfPath: string, late
     let latestContextList: string[] = [];
 
     for (const aspect of aspects) {
-      const p = await retrieveHybrid(ticker, "prev", aspect.sem, aspect.kw, 5);
+      if (prevChunks.length > 0) {
+        const p = await retrieveHybrid(ticker, "prev", aspect.sem, aspect.kw, 5);
+        prevContextList.push(...p);
+      }
       const l = await retrieveHybrid(ticker, "latest", aspect.sem, aspect.kw, 5);
-      prevContextList.push(...p);
       latestContextList.push(...l);
     }
 
@@ -124,22 +143,17 @@ export async function generateAiReport(ticker: string, prevPdfPath: string, late
     console.log(`[RAG Context Size] Prev: ${prevContextText.length} chars, Latest: ${latestContextText.length} chars`);
 
     // --- STEP 1: FACT EXTRACTION ---
-    const step1Prompt = `以下の <前回決算資料_抽出結果> と <今回決算資料_抽出結果> の情報を元に、事実のみを抽出してください。
+    let step1Prompt = `以下の <今回決算資料_抽出結果> の情報を元に、事実のみを抽出してください。\n\n<今回決算資料_抽出結果>\n${latestContextText}\n</今回決算資料_抽出結果>\n\n`;
+    if (prevContextText) {
+      step1Prompt = `以下の <前回決算資料_抽出結果> と <今回決算資料_抽出結果> の情報を元に、事実のみを抽出してください。\n\n<前回決算資料_抽出結果>\n${prevContextText}\n</前回決算資料_抽出結果>\n\n<今回決算資料_抽出結果>\n${latestContextText}\n</今回決算資料_抽出結果>\n\n`;
+    }
 
-<前回決算資料_抽出結果>
-${prevContextText}
-</前回決算資料_抽出結果>
-
-<今回決算資料_抽出結果>
-${latestContextText}
-</今回決算資料_抽出結果>
-
-【出力JSONフォーマット】
+    step1Prompt += `【出力JSONフォーマット】
 \`\`\`json
 {
   "current_performance": "当期実績の営業収益、営業利益などの数値と要因（テキストの記述をそのまま使用）",
   "future_guidance": "次期の業績見通し数値と前提条件（テキストの記述をそのまま使用）",
-  "report_comparison": "前回資料と今回資料の「課題」「リスク要因」の具体的な記述の差分事実"
+  "report_comparison": "前回資料と今回資料の「課題」「リスク要因」の具体的な記述の差分事実（前回資料がない場合は『前回資料がないため比較不可』とする）"
 }
 \`\`\`
 `;
@@ -150,9 +164,6 @@ ${latestContextText}
     const step1Result = await callOllama(STEP1_SYSTEM_PROMPT, step1Prompt);
     console.log(`Step 1 Time: ${((Date.now() - start) / 1000).toFixed(2)}s`);
     
-    // Save Step 1 result for debugging
-    await fs.writeFile(path.join(__dirname, "..", "data", "step1_debug.json"), step1Result, "utf8");
-
     // Typescript side parsing/replacement
     let normalizedStep1Result = formatJapaneseCurrency(step1Result);
     
@@ -197,10 +208,32 @@ ${normalizedStep1Result}
     const step2Result = await callOllama(STEP2_SYSTEM_PROMPT, step2Prompt);
     console.log(`Step 2 Time: ${((Date.now() - start) / 1000).toFixed(2)}s`);
 
-    const outPath = path.join(__dirname, "..", "data", `${ticker}_ai_report.json`);
-    await fs.writeFile(outPath, step2Result, "utf8");
-    console.log(`Saved final result to ${outPath}`);
-    if (onProgress) onProgress(`[AI分析] レポート生成完了: ${outPath}`);
+    let step2Json: any = {};
+    try {
+      // Remove any markdown block syntax if present
+      const cleanJsonStr = step2Result.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      step2Json = JSON.parse(cleanJsonStr);
+    } catch (e) {
+      console.error("Failed to parse Step 2 JSON. Using raw text.");
+      step2Json = { ai_comment: step2Result };
+    }
+
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO ai_reports 
+            (ticker, current_performance, future_guidance, report_comparison, ai_comment, updated_at) 
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        ticker,
+        step2Json.current_performance || '',
+        step2Json.future_guidance || '',
+        step2Json.report_comparison || '',
+        step2Json.ai_comment || '',
+        new Date().toISOString()
+      ]
+    });
+
+    console.log(`Saved final result to ai_reports DB for ${ticker}`);
+    if (onProgress) onProgress(`[AI分析] レポート生成完了: DB保存済み`);
     return true;
 
   } catch (error: any) {
