@@ -45,3 +45,19 @@ local.db*
 data/
 scratch/*.json
 scratch/
+
+# Test and scratch scripts
+scratch/
+*.js
+!src/**/*.js
+!next.config.js
+!tailwind.config.js
+!postcss.config.js
+test_db.js
+check.js
+count_valid.js
+reproduce.ts
+scratch_qdrant.ts
+gics_diff.csv
+*.sqlite
+kabu3.db
