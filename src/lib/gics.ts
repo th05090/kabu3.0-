@@ -27,7 +27,7 @@ async function askRerankLLM(prompt: string): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "gemma3:12b",
+      model: "gemma4:12b",
       prompt: prompt,
       stream: false,
       options: { temperature: 0.1 }
@@ -134,7 +134,7 @@ export async function reclassifyGics(ticker: string): Promise<{ success: boolean
 
     let dRank = 1;
     for (const res of denseResults) {
-      const cid = res.payload?.sub_industry_id as string;
+      const cid = (res.payload?.id || res.payload?.sub_industry_id) as string;
       if (cid) {
         rrfScores.set(cid, (rrfScores.get(cid) || 0) + 1.0 / (RRF_K + dRank));
         dRank++;

@@ -1475,7 +1475,7 @@ export const GICS_DICTIONARY: Record<string, GICSClassification> = {
     "sector_name": "公益事業"
   },
 
-"60101010": {
+/*"60101010": {
     "sub_industry_name": "各種不動産投資信託",
     "industry_id": "601010",
     "industry_name": "各種不動産投資信託",
@@ -1603,7 +1603,7 @@ export const GICS_DICTIONARY: Record<string, GICSClassification> = {
     "industry_group_name": "エクイティ不動産投資信託（REIT）",
     "sector_id": "60",
     "sector_name": "不動産"
-  },
+  },*/ 
 
 "60201010": {
     "sub_industry_name": "各種不動産事業",

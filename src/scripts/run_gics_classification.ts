@@ -30,7 +30,7 @@ async function askRerankLLM(prompt: string): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "gemma3:12b",
+      model: "gemma4:12b",
       prompt: prompt,
       stream: false,
       options: { temperature: 0.1 }
