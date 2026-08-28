@@ -8,7 +8,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 });
     }
 
-    const prompt = `あなたは株式市場のテーマ投資検索システム向けクエリ拡張AIです。
+    const prompt = `あなたは日本株式市場のテーマ投資検索システム向けクエリ拡張AIです。
 ユーザーから入力された投資テーマに対し、企業の事業説明文に実際に含まれる【具体的な要素技術、電子部品、インフラ、サプライチェーンの製品名】をカンマ区切りで5個だけ日本語で出力してください。
 出力形式の例：
 A, B, C, D, E
