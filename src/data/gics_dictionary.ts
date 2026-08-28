@@ -1135,7 +1135,7 @@ export const GICS_DICTIONARY: Record<string, GICSClassification> = {
     "sector_name": "金融"
   },
 
-"40204010": {
+/*"40204010": {
     "sub_industry_name": "モーゲージ不動産投資信託（REIT）",
     "industry_id": "402040",
     "industry_name": "モーゲージ不動産投資信託（REIT）",
@@ -1144,7 +1144,7 @@ export const GICS_DICTIONARY: Record<string, GICSClassification> = {
     "sector_id": "40",
     "sector_name": "金融"
   },
-
+*/ 
 "40301010": {
     "sub_industry_name": "保険ブローカー",
     "industry_id": "403010",

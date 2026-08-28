@@ -23,19 +23,70 @@ function escapeFTS5(text: string): string {
 }
 
 async function askRerankLLM(prompt: string): Promise<string> {
-  const res = await fetch(OLLAMA_URL, {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000); // 120,000ms = 2 minutes
+
+  try {
+    const res = await fetch(OLLAMA_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gemma4:12b",
+        prompt: prompt,
+        stream: false,
+        options: { temperature: 0.1 }
+      }),
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error(`LLM API Error: ${res.status}`);
+    const json = await res.json();
+    return json.response.trim();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function askGeminiLLM(prompt: string, schema?: any): Promise<any> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set.");
+  
+  const payload: any = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.1,
+    }
+  };
+  
+  if (schema) {
+    payload.generationConfig.response_mime_type = "application/json";
+    payload.generationConfig.response_schema = schema;
+  }
+  
+  const modelName = process.env.GEMINI_AUDIT_MODEL || 'gemini-flash-latest';
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "gemma4:12b",
-      prompt: prompt,
-      stream: false,
-      options: { temperature: 0.1 }
-    })
+    body: JSON.stringify(payload)
   });
-  if (!res.ok) throw new Error(`LLM API Error: ${res.status}`);
+  
+  // Rate limit protection (4 seconds wait) for free tier (15 RPM)
+  await new Promise(resolve => setTimeout(resolve, 4000));
+  
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini API Error: ${res.status} - ${errText}`);
+  }
+  
   const json = await res.json();
-  return json.response.trim();
+  if (!json.candidates || json.candidates.length === 0) {
+    throw new Error("Gemini returned empty candidates");
+  }
+  const text = json.candidates[0].content.parts[0].text;
+  
+  if (schema) {
+    return JSON.parse(text);
+  }
+  return text.trim();
 }
 
 /**
@@ -265,18 +316,55 @@ ${finalGicsDescription}
 
     let auditStatus = 'OK';
     let auditReason = '';
+    
     try {
-      const llmAnswer3 = await askRerankLLM(prompt3);
-      if (llmAnswer3.includes('[ERROR]')) {
-        auditStatus = 'ERROR';
-        auditReason = llmAnswer3;
+      if (process.env.USE_GEMINI_AUDIT === 'true') {
+        const geminiPrompt = `あなたは厳格なGICS分類の監査役です。
+企業の実態とGICS分類の間に矛盾がないか監査し、明確な矛盾（ねじれ）があれば ERROR と理由を、妥当であれば OK と出力してください。
+
+企業情報:
+${companyName}
+
+事業要約: 
+${summary || '情報なし'}
+メイン事業：${mainSegmentJson || '情報なし'}
+サブ事業：${subSegmentsJson || '情報なし'}
+
+判定されたGICS細分類: 
+${finalGicsName}
+判定されたGICS細分類の説明：
+${finalGicsDescription}
+`;
+        
+        const schema = {
+          type: "OBJECT",
+          properties: {
+            status: { type: "STRING", enum: ["OK", "ERROR"] },
+            reason: { type: "STRING" }
+          },
+          required: ["status", "reason"]
+        };
+        
+        const result = await askGeminiLLM(geminiPrompt, schema);
+        auditStatus = result.status;
+        auditReason = result.reason;
       } else {
-        auditStatus = 'OK';
-        auditReason = llmAnswer3;
+        const llmAnswer3 = await askRerankLLM(prompt3);
+        if (llmAnswer3.includes('[ERROR]')) {
+          auditStatus = 'ERROR';
+          auditReason = llmAnswer3;
+        } else {
+          auditStatus = 'OK';
+          auditReason = llmAnswer3;
+        }
       }
-    } catch(e) {
+    } catch(e: any) {
       console.error(`[GICS] Audit failed for ${ticker}`, e);
-      auditStatus = 'OK';
+      if (e.message && e.message.includes('429')) {
+        throw e;
+      }
+      auditStatus = 'ERROR';
+      auditReason = `[ERROR] Audit Request Failed: ${e.message}`;
     }
 
     // Save to DB

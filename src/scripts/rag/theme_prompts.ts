@@ -9,7 +9,7 @@ export async function askLLM(prompt: string, expectJson: boolean = false): Promi
       prompt: prompt,
       stream: false,
       format: expectJson ? "json" : undefined,
-      options: { temperature: 0.1 }
+      options: { temperature: 0.1, num_predict: 800 }
     })
   });
   if (!res.ok) {
@@ -38,11 +38,13 @@ ${segmentNames.map((s) => `- ${s}`).join("\n")}
 【厳守事項】
 1. セグメント名をそのまま繰り返すのではなく、関連キーワード（製品名など）を必ず拾うこと。
 2. 存在しない情報を勝手に推測したり捏造したりしないこと。
-3. 出力は以下のJSON配列のみとし、マークダウンで囲まないでください。JSONの値に改行を含めないでください。
+3. 出力は以下のJSON形式のみとし、マークダウンで囲まないでください。JSONの値に改行を含めないでください。
 
-[
-  { "segment": "セグメント名", "description": "事業内容の要約" }
-]
+{
+  "segments": [
+    { "segment": "セグメント名", "description": "事業内容の要約" }
+  ]
+}
 
 【テキスト】
 ${pass2Text}`;
@@ -63,8 +65,15 @@ ${refInfo}
 【その他の展開セグメント】:
 ${otherSegments.map((s: any) => `- ${s.segment}（${s.description}）`).join("\n")}
 
+【思考のステップ】
+必ず以下の順番で思考してください。
+1. 上記の主力事業とその他事業の情報をスキャンし、中核事業を特定する。
+2. 決して推測や関連用語からの類推を行わないこと。
+3. 指定されたJSONフォーマットのみを出力して終了すること。
+
 【出力形式】
-事業要約: [1文要約]`;
+以下のJSONフォーマットのみを出力してください。
+{ "summary": "1文要約" }`;
 
 export const unifiedPromptTemplate = (
   companyName: string, 
@@ -84,5 +93,12 @@ export const unifiedPromptTemplate = (
 【有価証券報告書テキスト（抜粋）】
 ${earningsText}
 
+【思考のステップ】
+必ず以下の順番で思考してください。
+1. テキスト全体を1度だけスキャンし、中核事業を特定する。
+2. 決して推測や関連用語からの類推を行わないこと。
+3. 指定されたJSONフォーマットのみを出力して終了すること。
+
 【出力形式】
-事業要約: [1文要約]`;
+以下のJSONフォーマットのみを出力してください。
+{ "summary": "1文要約" }`;

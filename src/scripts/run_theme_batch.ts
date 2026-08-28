@@ -322,8 +322,13 @@ async function main() {
           earningsText = "テキストなし";
         }
         
-        let finalOutput = await askLLM(unifiedPromptTemplate(companyName, ticker5, indexSummary, indexKeywords, earningsText), false);
-        summary = finalOutput.replace(/^事業要約[：:]\s*/, "").trim();
+        let finalOutput = await askLLM(unifiedPromptTemplate(companyName, ticker5, indexSummary, indexKeywords, earningsText), true);
+        try {
+          const parsed = JSON.parse(finalOutput);
+          summary = parsed.summary ? parsed.summary.trim() : finalOutput;
+        } catch(e) {
+          summary = finalOutput;
+        }
       } else {
         console.log(`-> Running Pass 2 (Dynamic Query per Segment)...`);
         const uniqueChunks = new Map<string, string>();
@@ -345,9 +350,10 @@ async function main() {
         let llmText2 = await askLLM(pass2PromptTemplate(segmentNames, pass2Text), true);
         llmText2 = llmText2.replace(/^```(json)?/, "").replace(/```$/, "").trim();
         
-        let descriptionsData = [];
+        let descriptionsData: any = [];
         try {
-          descriptionsData = JSON.parse(llmText2);
+          const parsed = JSON.parse(llmText2);
+          descriptionsData = parsed.segments || parsed;
           if (!Array.isArray(descriptionsData)) descriptionsData = [descriptionsData];
         } catch (e) {
           console.error(`[Error] Pass 2 JSON Parse Failed for ${companyName}.`);
@@ -355,7 +361,7 @@ async function main() {
 
         const norm = (s: string) => String(s).replace(/\s+/g, '');
 
-        const mergedSegments = segmentsData.map((s1: any) => {
+        const mergedSegments = (segmentsData || []).map((s1: any) => {
           const descObj = descriptionsData.find((s2: any) => norm(s2.segment) === norm(s1.segment));
           return {
             segment: s1.segment,
@@ -381,8 +387,13 @@ async function main() {
         otherSegments = otherSegments.slice(0, 2); // max 2 subs
 
         console.log(`-> Running Step 2 Unified Summary...`);
-        let finalOutput = await askLLM(step2PromptTemplate(companyName, ticker5, refInfo, maxSegment, otherSegments), false);
-        summary = finalOutput.replace(/^事業要約[：:]\s*/, "").trim();
+        let finalOutput = await askLLM(step2PromptTemplate(companyName, ticker5, refInfo, maxSegment, otherSegments), true);
+        try {
+          const parsed = JSON.parse(finalOutput);
+          summary = parsed.summary ? parsed.summary.trim() : finalOutput;
+        } catch(e) {
+          summary = finalOutput;
+        }
         
         mainSegmentJson = JSON.stringify(maxSegment);
         subSegmentsJson = JSON.stringify(otherSegments);

@@ -95,6 +95,20 @@ export async function processIrNews(onProgress?: (msg: string) => void) {
 
     // 1. Docling MD Conversion
     if (!existsSync(mdPath)) {
+      // Docling実行前に前回ループでLLMが使用したVRAMを確実に解放する
+      try {
+        await fetch("http://localhost:11434/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: LLM_MODEL, keep_alive: 0 })
+        });
+        await fetch("http://localhost:11434/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "bge-m3", keep_alive: 0 })
+        });
+      } catch(e) {}
+
       await waitForVram(3.0);
       try {
         console.log(`  => Running Docling on PDF...`);

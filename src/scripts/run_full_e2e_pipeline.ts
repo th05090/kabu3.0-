@@ -1,5 +1,5 @@
 import { processEarningsReports } from '../lib/earnings_processor';
-import { scrapeIRNews } from './fetch_ir_news';
+import { fetchAllIRNewsGlobal } from './fetch_ir_news';
 import { processIrNews } from './analyze_ir_news';
 import { createClient } from '@libsql/client';
 
@@ -17,7 +17,7 @@ async function main() {
 
   // 1. Fetch Earnings PDF, Convert to MD (Docling), Extract Segments (Gemma3), Update DB & Qdrant
   console.log(`\n>>> [1/4] Running Earnings Pipeline (Fetch -> MD -> GICS -> Qdrant)`);
-  await processEarningsReports((msg) => console.log(msg), targetTicker);
+  await processEarningsReports((msg) => console.log(msg), targetTicker ? [targetTicker] : undefined);
 
   let tickersToAnalyze = [];
   if (targetTicker) {
@@ -29,10 +29,7 @@ async function main() {
 
   // 3. Fetch IR News
   console.log(`\n>>> [3/4] Fetching IR News (New Business) from IR BANK`);
-  for (const ticker of tickersToAnalyze) {
-    console.log(`--- Scraping IR News for ${ticker} ---`);
-    await scrapeIRNews(ticker);
-  }
+  await fetchAllIRNewsGlobal(5);
 
   // 4. Analyze IR News & Append to Qdrant
   console.log(`\n>>> [4/4] Analyzing IR News (Docling -> Gemma3 -> Qdrant Update)`);

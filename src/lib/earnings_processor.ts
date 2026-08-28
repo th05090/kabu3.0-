@@ -243,8 +243,13 @@ export async function processEarningsReports(onProgress?: (msg: string) => void,
         } catch(e) {
           earningsText = "テキストなし";
         }
-        let finalOutput = await askLLM(unifiedPromptTemplate(String(row.name), ticker, indexSummary, indexKeywords, earningsText), false);
-        summary = finalOutput.replace(/^事業要約[：:]\s*/, "").trim();
+        let finalOutput = await askLLM(unifiedPromptTemplate(String(row.name), ticker, indexSummary, indexKeywords, earningsText), true);
+        try {
+          const parsed = JSON.parse(finalOutput);
+          summary = parsed.summary ? parsed.summary.trim() : finalOutput;
+        } catch(e) {
+          summary = finalOutput;
+        }
       } else {
         console.log(`  => Running Pass 2 (Dynamic Query per Segment)...`);
         const uniqueChunks = new Map<string, string>();
@@ -264,16 +269,17 @@ export async function processEarningsReports(onProgress?: (msg: string) => void,
         let llmText2 = await askLLM(pass2PromptTemplate(segmentNames, pass2Text), true);
         llmText2 = llmText2.replace(/^```(json)?/, "").replace(/```$/, "").trim();
         
-        let descriptionsData = [];
+        let descriptionsData: any = [];
         try {
-          descriptionsData = JSON.parse(llmText2);
+          const parsed = JSON.parse(llmText2);
+          descriptionsData = parsed.segments || parsed;
           if (!Array.isArray(descriptionsData)) descriptionsData = [descriptionsData];
         } catch (e) {
           console.error(`  => [Warning] Pass 2 JSON Parse Failed.`);
         }
 
         const norm = (s: string) => String(s).replace(/\s+/g, '');
-        const mergedSegments = segmentsData.map((s1: any) => {
+        const mergedSegments = (segmentsData || []).map((s1: any) => {
           const descObj = descriptionsData.find((s2: any) => norm(s2.segment) === norm(s1.segment));
           return {
             segment: s1.segment,
@@ -299,8 +305,13 @@ export async function processEarningsReports(onProgress?: (msg: string) => void,
         otherSegments = otherSegments.slice(0, 2); // max 2 subs
 
         console.log(`  => Running Step 2 Unified Summary...`);
-        let finalOutput = await askLLM(step2PromptTemplate(String(row.name), ticker, refInfo, maxSegment, otherSegments), false);
-        summary = finalOutput.replace(/^事業要約[：:]\s*/, "").trim();
+        let finalOutput = await askLLM(step2PromptTemplate(String(row.name), ticker, refInfo, maxSegment, otherSegments), true);
+        try {
+          const parsed = JSON.parse(finalOutput);
+          summary = parsed.summary ? parsed.summary.trim() : finalOutput;
+        } catch(e) {
+          summary = finalOutput;
+        }
         
         mainSegmentJson = JSON.stringify(maxSegment);
         subSegmentsJson = JSON.stringify(otherSegments);
@@ -309,8 +320,8 @@ export async function processEarningsReports(onProgress?: (msg: string) => void,
       console.log(`  [3/4] Updating DB and GICS...`);
       // 冪等性を担保するため、.doneが未作成の銘柄は常にDB・GICS・Qdrantを上書き更新する
       await db.execute({
-        sql: "UPDATE equities_master SET summary = ?, main_segment = ?, sub_segments = ? WHERE ticker = ?",
-        args: [summary, mainSegmentJson || "{}", subSegmentsJson || "[]", ticker]
+        sql: "UPDATE equities_master SET summary = ?, main_segment = ?, sub_segments = ?, theme_keywords = ? WHERE ticker = ?",
+        args: [summary, mainSegmentJson || "{}", subSegmentsJson || "[]", indexKeywords, ticker]
       });
 
       const gicsResult = await reclassifyGics(ticker);
@@ -321,7 +332,6 @@ export async function processEarningsReports(onProgress?: (msg: string) => void,
       }
 
       // Update Qdrant Vector
-      const indexKeywords = row.theme_keywords ? String(row.theme_keywords) : "";
       let mainSegmentText = "";
       let subSegmentText = "";
       try {
@@ -360,8 +370,10 @@ export async function processEarningsReports(onProgress?: (msg: string) => void,
       });
       console.log(`  => Successfully updated Qdrant vector for ${ticker}`);
 
-      console.log(`  [4/4] Generating AI Analyst Report...`);
+      console.log(`  [4/4] Generating AI Analyst Report (SKIPPED in Data Sync)...`);
       
+      // データ同期時は処理時間がかかりすぎるため、AIアナリストレポートの自動生成はスキップ
+      /*
       let prevPdfPath = "";
       let prevMdPath = "";
       if (mdFiles.length > 1) {
@@ -376,6 +388,9 @@ export async function processEarningsReports(onProgress?: (msg: string) => void,
       }
 
       await generateAiReport(ticker, prevPdfPath, pdfPath, onProgress);
+      */
+
+      // AIレポート作成をスキップしても、再処理ループを防ぐために処理完了フラグ(.done)は作成する
       await fs.writeFile(pdfPath + ".done", new Date().toISOString());
 
       phase2Count++;

@@ -271,6 +271,21 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
     const { processEarningsReports } = await import('./earnings_processor');
     await processEarningsReports(onProgress);
 
+    // --- Ollama アンロード処理 ---
+    console.log('[Ollama] Unloading models from VRAM before IR News Phase...');
+    if (onProgress) onProgress('VRAMを解放中...');
+    const modelsToUnload = ["gemma4:12b", "bge-m3"];
+    for (const m of modelsToUnload) {
+      try {
+        await fetch("http://localhost:11434/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: m, keep_alive: 0 })
+        });
+      } catch(e) {}
+    }
+    // -----------------------------
+
     console.log('[J-Quants] Fetching IR News (Global Phase)...');
     if (onProgress) onProgress('過去5日分のIRニュースを検索・取得しています...');
     const { fetchAllIRNewsGlobal } = await import('../scripts/fetch_ir_news');
