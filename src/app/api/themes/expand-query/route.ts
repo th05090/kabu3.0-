@@ -8,8 +8,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 });
     }
 
-    const prompt = `「${query}」という株式テーマに関連する具体的な事業内容や関連キーワードを、日本語でカンマ区切りで5個挙げてください。解説は一切不要です。`;
-    const model = 'gemma4:12b'; // We can make this configurable later if needed
+    const prompt = `あなたは株式市場のテーマ投資検索システム向けクエリ拡張AIです。
+ユーザーから入力された投資テーマに対し、企業の事業説明文に実際に含まれる【具体的な要素技術、電子部品、インフラ、サプライチェーンの製品名】をカンマ区切りで5個だけ出力してください。
+出力形式の例：
+A, B, C, D, E
+※上記のように単語のみをカンマ区切りで出力し、前置き、挨拶、解説、リスト番号などは絶対に含めないでください。
+
+=== 例 ===
+User: 脱炭素
+Assistant: 再生可能エネルギー, 水素アンモニア, EV充電器, 排出権取引, CCS
+
+User: 半導体製造装置
+Assistant: 露光装置, エッチング装置, ダイサー, ウェハ洗浄, テスタ
+=== 例はここまで ===
+
+User: ${query}
+Assistant:`;
+    const model = 'qwen2.5:14b-instruct-q4_K_M';
 
     const res = await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST',
@@ -21,7 +36,8 @@ export async function POST(request: Request) {
         prompt,
         stream: false,
         options: {
-          temperature: 0
+          temperature: 0,
+          num_ctx: 2048
         }
       }),
     });
