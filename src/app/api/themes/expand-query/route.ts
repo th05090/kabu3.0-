@@ -36,7 +36,7 @@ Assistant:`;
         prompt,
         stream: false,
         options: {
-          temperature: 0,
+          temperature: 0.1,
           num_ctx: 2048
         }
       }),
