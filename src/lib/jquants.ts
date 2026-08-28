@@ -268,7 +268,7 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
 
     console.log('[J-Quants] Calling earnings processor for new PDFs...');
     if (onProgress) onProgress('決算PDFからのAI解析(Docling + LLM)を開始します...');
-    const { processEarningsReports } = await import('./earnings_processor');
+    const { processEarningsReports } = await import('../features/earnings/index');
     await processEarningsReports(onProgress);
 
     // --- Ollama アンロード処理 ---

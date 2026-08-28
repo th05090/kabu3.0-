@@ -1,4 +1,4 @@
-import { processEarningsReports } from '../lib/earnings_processor';
+import { processEarningsReports } from '../features/earnings/index';
 import { fetchAllIRNewsGlobal } from './fetch_ir_news';
 import { processIrNews } from './analyze_ir_news';
 import { createClient } from '@libsql/client';

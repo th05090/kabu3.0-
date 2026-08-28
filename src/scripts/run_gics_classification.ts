@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client';
-import { reclassifyGics } from '../lib/gics';
+import { reclassifyGics } from '../features/gics/classifier';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 

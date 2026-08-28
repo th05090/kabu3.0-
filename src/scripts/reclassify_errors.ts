@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client';
-import { reclassifyGics } from '../lib/gics';
+import { reclassifyGics } from '../features/gics/classifier';
 import { config } from 'dotenv';
 config({ path: '.env.local' });
 
