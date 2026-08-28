@@ -19,16 +19,6 @@ export async function askLLM(prompt: string, expectJson: boolean = false): Promi
   return jsonRes.response.trim();
 }
 
-export const pass1PromptTemplate = (pass1Text: string) => `あなたはデータ抽出アシスタントです。以下のテキストから、企業のセグメント別の売上高（または営業収益）を抽出し、以下のJSON形式で出力してください。
-マークダウンで囲まないでください。JSONの値に改行を含めないでください。
-
-[
-  { "segment": "セグメント名", "revenue": "売上高数値（カンマなし半角数字）" }
-]
-
-【テキスト】
-${pass1Text}`;
-
 export const pass2PromptTemplate = (segmentNames: string[], pass2Text: string) => `あなたはデータ抽出アシスタントです。以下のテキストから、指定された各セグメントの事業内容（具体的な製品名、サービス名、対象顧客など）を抽出してください。
 テキストに記載がない場合は「記載なし」としてください。
 

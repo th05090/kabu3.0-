@@ -366,7 +366,8 @@ Next.jsのAPIコンテキストから、独立したNode.jsのバックグラウ
 ### 7.1 RAGパイプラインとAIプロンプト設定
 決算書PDFや四季報データから情報を抽出・分類するためのプロンプト設定です。すべて `gemma3:12b` (Ollama) に最適化されています。
 
-#### 7.1.1 決算書PDF抽出プロンプト (`src/scripts/rag/theme_prompts.ts`)
+#### 7.1.1 決算書PDF抽出プロンプト (src/scripts/rag/theme_prompts.ts, src/lib/segment_extractor.ts)
+
 **Stage 3: Qdrantプレーンテキスト抽出用 (フォールバック)**
 ```text
 あなたは企業の決算説明資料から、事業セグメントとその売上高を抽出する専門家です。
@@ -389,7 +390,8 @@ Next.jsのAPIコンテキストから、独立したNode.jsのバックグラウ
 テキストに記載がない場合は「記載なし」としてください。
 
 【対象セグメント】
-{segmentNames}
+- {segmentName1}
+- {segmentName2}
 
 【厳守事項】
 1. セグメント名をそのまま繰り返すのではなく、関連キーワード（製品名など）を必ず拾うこと。
@@ -408,15 +410,16 @@ Next.jsのAPIコンテキストから、独立したNode.jsのバックグラウ
 
 **Step 2: アナリスト1文要約用**
 ```text
-あなたはプロの証券アナリストです。以下の情報をもとに、この企業の中核事業を投資家向けに1文（30〜50文字程度）でわかりやすく要約してください。
-※重要：記載のない推測や、企業名の直訳は絶対に禁止します。具体的な企業名を要約に含めることを禁止します。
+あなたはプロの証券アナリストです。以下の企業のセグメント別売上構成と参考情報を基に、この企業がどのようなビジネスを中核としているか、投資家向けに1文（30〜50文字程度）でわかりやすく要約してください。
+※重要：テキストに記載のない推測や、企業名の直訳・妄想は絶対に禁止します。具体的な企業名を要約に含めることを禁止します。
 
 【企業名】: {companyName} ({ticker5})
 
-【企業プロフィール・主要事業】
 {refInfo}
-- 主力事業: {maxSegment}
-- その他事業: {otherSegments}
+【売上が最大の主力セグメント】: {maxSegment.segment}（{maxSegment.description}）
+【その他の展開セグメント】:
+- {otherSegment1.segment}（{otherSegment1.description}）
+- {otherSegment2.segment}（{otherSegment2.description}）
 
 【思考のステップ】
 必ず以下の順番で思考してください。
@@ -481,7 +484,7 @@ Next.jsのAPIコンテキストから、独立したNode.jsのバックグラウ
 6. ※もし抽出データが全くなく、評価が不可能な場合は、捏造せず各項目に「記載なし」または「評価不能」と出力してください。
 ```
 
-#### 7.1.3 GICS 3段階分類・監査プロンプト (`src/scripts/run_gics_classification.ts`, `src/lib/gics.ts`)
+#### 7.1.3 GICS 3段階分類・再分類プロンプト (src/scripts/run_gics_classification.ts, src/features/gics/classifier.ts)
 
 **Stage 1 (Top 10 → Top 3 絞り込み)**
 ```text
@@ -519,7 +522,10 @@ Next.jsのAPIコンテキストから、独立したNode.jsのバックグラウ
 {themeListText2}
 ```
 
-**Stage 3 (LLM監査・異常検知)**
+**Stage 3 (LLM Audit 異常値検知)**
+※実行環境（Ollama または Gemini）に応じてプロンプトを分岐させています。
+
+*(1) Ollama用プロンプト (推論プロセス強制型)*
 ```text
 あなたは厳格なGICS分類の監査役です。
 企業の実態とGICS分類の間に矛盾がないか監査してください。
@@ -549,6 +555,25 @@ Next.jsのAPIコンテキストから、独立したNode.jsのバックグラウ
 
 【ステップ2：矛盾判定】
 ステップ1で書き出した企業の実態と、判定されたGICS細分類の説明を比較し、明確な矛盾（ねじれ）があれば [ERROR] と理由を、妥当であれば [OK] を出力してください。
+```
+
+*(2) Gemini用プロンプト (JSONスキーマモード適用時)*
+```text
+あなたは厳格なGICS分類の監査役です。
+企業の実態とGICS分類の間に矛盾がないか監査し、明確な矛盾（ねじれ）があれば ERROR と理由を、妥当であれば OK と出力してください。
+
+企業情報:
+{companyName}
+
+事業要約: 
+{summary}
+メイン事業：{mainSegmentJson}
+サブ事業：{subSegmentsJson}
+
+判定されたGICS細分類: 
+{finalGicsName}
+判定されたGICS細分類の説明：
+{finalGicsDescription}
 ```
 
 #### 7.1.4 動的テーマ検索・キーワード拡張プロンプト (`src/app/api/themes/expand-query/route.ts`)
