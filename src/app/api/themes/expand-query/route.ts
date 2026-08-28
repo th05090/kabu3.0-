@@ -8,7 +8,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 });
     }
 
-    const prompt = `「${query}」という株式テーマに関連する具体的な事業内容や関連キーワードを、日本語でカンマ区切りで10個挙げてください。解説は一切不要です。`;
+    const prompt = `「${query}」という株式テーマに関連する具体的な事業内容や関連キーワードを、日本語でカンマ区切りで5個挙げてください。解説は一切不要です。`;
     const model = 'gemma4:12b'; // We can make this configurable later if needed
 
     const res = await fetch('http://127.0.0.1:11434/api/generate', {
