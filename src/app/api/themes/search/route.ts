@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     const denseSearchRes = await qdrant.search("company_profiles", {
       vector: embedding,
-      limit: 50,
+      limit: 100,
       with_payload: true
     });
 
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
           FROM equities_fts 
           WHERE equities_fts MATCH ?
           ORDER BY bm25_score ASC
-          LIMIT 50
+          LIMIT 100
         `;
         const ftsRes = await db.execute({ sql: ftsSql, args: [matchQuery] });
         ftsRes.rows.forEach((r, i) => {
@@ -109,9 +109,46 @@ export async function POST(request: Request) {
       };
     });
 
-    // 6. Sort by final RRF score and slice top 50
+    // 6. Sort by RRF score and slice top 100 for reranking
     finalResults.sort((a: any, b: any) => b.search_score - a.search_score);
-    const top50Results = finalResults.slice(0, 50);
+    const top100Results = finalResults.slice(0, 100);
+
+    // 7. Reranking (Python FastAPI)
+    try {
+      // Use summary or theme_keywords for the reranker text
+      const documents = top100Results.map((r: any) => r.summary || r.theme_keywords || "");
+      
+      const rerankRes = await fetch("http://127.0.0.1:8000/rerank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: query,
+          documents: documents
+        })
+      });
+
+      if (rerankRes.ok) {
+        const rerankData = await rerankRes.json();
+        const scores = rerankData.scores || [];
+        
+        // Attach rerank scores
+        top100Results.forEach((r: any, i) => {
+          r.rerank_score = scores[i] !== undefined ? scores[i] : -999;
+          // Optionally override search_score with rerank_score for UI sorting
+          r.search_score = r.rerank_score;
+        });
+
+        // Re-sort by rerank score
+        top100Results.sort((a: any, b: any) => b.rerank_score - a.rerank_score);
+      } else {
+        console.warn("Reranker API returned an error status:", rerankRes.status);
+      }
+    } catch (err) {
+      console.warn("Failed to call Reranker API (falling back to RRF):", err);
+    }
+
+    // 8. Slice top 50
+    const top50Results = top100Results.slice(0, 50);
 
     return NextResponse.json({ results: top50Results });
   } catch (error: any) {
