@@ -82,6 +82,20 @@ export async function processIrNews(onProgress?: (msg: string) => void) {
 
   console.log(`Found ${rows.length} IR news to analyze.`);
 
+  // Phase 1: LLM Inference
+  console.log("\n=== Phase 1: LLM Inference ===");
+  
+  // Unload embedding model to free VRAM for LLM
+  try {
+    await fetch("http://localhost:11434/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "bge-m3", keep_alive: 0 })
+    });
+  } catch(e) {}
+
+  const parsedResults: any[] = [];
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const ticker = String(row.ticker);
@@ -90,25 +104,11 @@ export async function processIrNews(onProgress?: (msg: string) => void) {
     const title = String(row.title);
     const mdPath = pdfPath.replace(/\.pdf$/i, '.md');
 
-    console.log(`\n[${i + 1}/${rows.length}] Analyzing IR News: ${ticker} - ${title}`);
-    if (onProgress) onProgress(`[${i + 1}/${rows.length}] 処理中: ${ticker} (${title})`);
+    console.log(`\n[Phase 1: ${i + 1}/${rows.length}] Analyzing IR News: ${ticker} - ${title}`);
+    if (onProgress) onProgress(`[Phase1: ${i + 1}/${rows.length}] 抽出中: ${ticker} (${title})`);
 
     // 1. Docling MD Conversion
     if (!existsSync(mdPath)) {
-      // Docling実行前に前回ループでLLMが使用したVRAMを確実に解放する
-      try {
-        await fetch("http://localhost:11434/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: LLM_MODEL, keep_alive: 0 })
-        });
-        await fetch("http://localhost:11434/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "bge-m3", keep_alive: 0 })
-        });
-      } catch(e) {}
-
       await waitForVram(3.0);
       try {
         console.log(`  => Running Docling on PDF...`);
@@ -156,7 +156,8 @@ export async function processIrNews(onProgress?: (msg: string) => void) {
     
     let llmResult = "";
     try {
-      llmResult = await askLLM(`${IR_NEWS_PROMPT}\n\n${prompt}`);
+      // JSON mode explicitly enabled with `true` argument
+      llmResult = await askLLM(`${IR_NEWS_PROMPT}\n\n${prompt}`, true);
     } catch (e: any) {
       console.error(`  => LLM call failed: ${e.message}`);
       continue;
@@ -171,11 +172,36 @@ export async function processIrNews(onProgress?: (msg: string) => void) {
       continue;
     }
 
-    const analysisText = `【IRニュース分析: ${title}】\n` + 
+    const analysisText = `【IRニュース: ${title}】\n` + 
       `- 事業領域: ${parsedJson.business_domain?.join(", ")}\n` +
       `- コア技術・モデル: ${parsedJson.core_technology_model?.join(", ")}\n` +
       `- ターゲット・課題: ${parsedJson.target_and_problem?.join(", ")}\n` +
-      `- 検索用類義語: ${parsedJson.search_synonyms?.join(", ")}`;
+      `- 関連検索語: ${parsedJson.search_synonyms?.join(", ")}`;
+
+    parsedResults.push({ row, analysisText, newsId, ticker, title });
+  }
+
+  // Unload LLM
+  try {
+    await fetch("http://localhost:11434/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: LLM_MODEL, keep_alive: 0 })
+    });
+  } catch(e) {}
+
+  if (parsedResults.length === 0) {
+    console.log("\nNo parsed results to vectorize. Exiting.");
+    return;
+  }
+
+  // Phase 2: Vectorization
+  console.log("\n=== Phase 2: Vectorization & DB Update ===");
+  
+  for (let i = 0; i < parsedResults.length; i++) {
+    const { row, analysisText, newsId, ticker, title } = parsedResults[i];
+    console.log(`\n[Phase 2: ${i + 1}/${parsedResults.length}] Vectorizing IR News: ${ticker} - ${title}`);
+    if (onProgress) onProgress(`[Phase2: ${i + 1}/${parsedResults.length}] ベクトル化: ${ticker} (${title})`);
 
     // 4. Update ai_reports
     const existingAiReport = await db.execute({
@@ -190,8 +216,6 @@ export async function processIrNews(onProgress?: (msg: string) => void) {
     
     currentIrNewsAnalysis += analysisText;
 
-    // We must ensure the record exists in ai_reports. Let's do INSERT OR REPLACE if it doesn't exist, but we only want to update ir_news_analysis.
-    // However, if the earnings report analysis hasn't run yet, there might not be a record.
     if (existingAiReport.rows.length === 0) {
        await db.execute({
           sql: 'INSERT INTO ai_reports (ticker, ir_news_analysis, updated_at) VALUES (?, ?, ?)',
@@ -207,31 +231,29 @@ export async function processIrNews(onProgress?: (msg: string) => void) {
     // 5. Update Qdrant company_profiles
     console.log(`  => Updating Qdrant company_profiles vector...`);
     
-    // First, fetch the existing profile info from equities_master
     const eqRow = await db.execute({
       sql: 'SELECT summary, theme_keywords, main_segment, sub_segments, name FROM equities_master WHERE ticker = ?',
       args: [ticker]
     });
 
     if (eqRow.rows.length > 0) {
-      const row = eqRow.rows[0];
-      const summary = row.summary ? String(row.summary) : "";
-      const indexKeywords = row.theme_keywords ? String(row.theme_keywords) : "";
+      const eq = eqRow.rows[0];
+      const summary = eq.summary ? String(eq.summary) : "";
+      const indexKeywords = eq.theme_keywords ? String(eq.theme_keywords) : "";
       let mainSegmentText = "";
       let subSegmentText = "";
       try {
-        if (row.main_segment) {
-          const m = JSON.parse(String(row.main_segment));
-          mainSegmentText = `セグメント名: ${m.segment}\n説明: ${m.description}`;
+        if (eq.main_segment) {
+          const m = JSON.parse(String(eq.main_segment));
+          mainSegmentText = `セグメント: ${m.segment}\n説明: ${m.description}`;
         }
-        if (row.sub_segments) {
-          const subs = JSON.parse(String(row.sub_segments));
-          subSegmentText = subs.map((s: any) => `セグメント名: ${s.segment}\n説明: ${s.description}`).join("\n---\n");
+        if (eq.sub_segments) {
+          const subs = JSON.parse(String(eq.sub_segments));
+          subSegmentText = subs.map((s: any) => `セグメント: ${s.segment}\n説明: ${s.description}`).join("\n---\n");
         }
       } catch (e) {}
 
-      // Combine existing with new IR News Analysis
-      const qdrantText = `【事業要約】\n${summary}\n\n【機能的価値キーワード】\n${indexKeywords}\n\n【メイン事業】\n${mainSegmentText}\n\n【サブ事業】\n${subSegmentText}\n\n【新規事業/IRニュース】\n${currentIrNewsAnalysis}`;
+      const qdrantText = `【企業概要】\n${summary}\n\n【代表的なキーワード】\n${indexKeywords}\n\n【メインセグメント】\n${mainSegmentText}\n\n【サブセグメント】\n${subSegmentText}\n\n【新規事業/IRニュース】\n${currentIrNewsAnalysis}`;
       
       const embedRes = await fetch(EMBED_URL, {
         method: "POST",
@@ -247,7 +269,7 @@ export async function processIrNews(onProgress?: (msg: string) => void) {
             vector: embedRes.embedding,
             payload: {
               ticker: ticker,
-              name: String(row.name),
+              name: String(eq.name),
               summary: summary,
               keywords: indexKeywords,
               text: qdrantText
@@ -266,6 +288,15 @@ export async function processIrNews(onProgress?: (msg: string) => void) {
 
     console.log(`  => Marked as analyzed in DB.`);
   }
+
+  // Unload embedding model
+  try {
+    await fetch("http://localhost:11434/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "bge-m3", keep_alive: 0 })
+    });
+  } catch(e) {}
 
   console.log("--- IR News Processing Complete ---");
 }
