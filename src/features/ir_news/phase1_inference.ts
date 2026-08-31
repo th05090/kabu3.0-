@@ -95,7 +95,7 @@ export async function runPhase1Inference(rows: any[], onProgress?: (msg: string)
 
     // 1. Docling MD Conversion
     if (!existsSync(mdPath)) {
-      await waitForVram(3.0);
+      await waitForVram(1.0);
       try {
         console.log(`  => Running Docling on PDF...`);
         const pPath = path.resolve(process.cwd(), "src/scripts/pdf_to_md_docling.py");
