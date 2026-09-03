@@ -127,13 +127,13 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
               num(row.NxFOP) || num(row.FOP) || num(row.NxFNCOP) || num(row.FNCOP), 
               num(row.NxFNp) || num(row.FNP) || num(row.NxFNCNP) || num(row.FNCNP), div,
               eps, eps, div, shares,
-              num(row.OrdinaryProfit) || num(row.NCOrdinaryProfit),
-              num(row.TotalAssets) || num(row.NCTotalAssets),
-              num(row.Equity) || num(row.NCEquity),
-              num(row.OperatingCF) || num(row.NCOperatingCF),
-              num(row.InvestingCF) || num(row.NCInvestingCF),
-              num(row.FinancingCF) || num(row.NCFinancingCF),
-              num(row.CashEquivalents) || num(row.NCCashEquivalents)
+              num(row.OdP) || num(row.NCOdP) || num(row.OrdinaryProfit) || num(row.NCOrdinaryProfit),
+              num(row.TA) || num(row.NCTA) || num(row.TotalAssets) || num(row.NCTotalAssets),
+              num(row.Eq) || num(row.NCEq) || num(row.Equity) || num(row.NCEquity),
+              num(row.CFO) || num(row.NCOperatingCF) || num(row.OperatingCF),
+              num(row.CFI) || num(row.NCInvestingCF) || num(row.InvestingCF),
+              num(row.CFF) || num(row.NCFinancingCF) || num(row.FinancingCF),
+              num(row.CashEq) || num(row.NCCashEquivalents) || num(row.CashEquivalents)
             ]
           };
         });

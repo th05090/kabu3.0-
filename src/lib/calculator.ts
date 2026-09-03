@@ -8,14 +8,7 @@ export async function calculateAndPopulateStocks() {
   console.log('--- Starting Metrics Calculation ---');
 
   try {
-    // 1. stocksテーブルをクリア
     await db.execute('DELETE FROM stocks');
-
-    // 2. equities_master と daily_quotes を結合し、各銘柄の最新指標を計算する
-    // SQLiteのウィンドウ関数を利用して、過去N日分のデータを集計します。
-    // ※本番環境（数千銘柄×数百日）ではSQLiteの計算負荷に注意が必要ですが、まずはSQLで一括算出します。
-    
-    // SQLite 3.25.0+ はウィンドウ関数 (OVER, PARTITION BY) をサポートしています。
     const query = `
       WITH RankedQuotesRaw AS (
         SELECT 
@@ -76,10 +69,22 @@ export async function calculateAndPopulateStocks() {
         SELECT 
           f1.*,
           (
-            SELECT SUM(f3.eps)
-            FROM LatestFinancialsRaw f3
-            WHERE f3.ticker = f1.ticker AND f3.rn <= 4
-          ) as ttm_eps,
+            SELECT f_fy.profit 
+            FROM financials f_fy 
+            WHERE f_fy.ticker = f1.ticker 
+              AND f_fy.date <= f1.date 
+              AND f_fy.date >= date(f1.date, '-15 months')
+            ORDER BY f_fy.net_sales DESC LIMIT 1
+          ) as latest_fy_profit,
+          (
+            SELECT f_py.profit 
+            FROM financials f_py 
+            WHERE f_py.ticker = f1.ticker 
+              AND f_py.date < f1.date 
+              AND f_py.date >= date(f1.date, '-14 months') 
+              AND f_py.date <= date(f1.date, '-10 months')
+            ORDER BY f_py.date DESC LIMIT 1
+          ) as prev_same_q_profit,
           (
             SELECT date 
             FROM financials f2 
@@ -184,18 +189,10 @@ export async function calculateAndPopulateStocks() {
         -- パーフェクトオーダー判定 (価格 > 25 > 75 > 200)
         (met.current_price > met.sma_25 AND met.sma_25 > met.sma_75 AND met.sma_75 > met.sma_200) as is_perfect_order,
 
-        -- 財務指標 (Financials)
-        -- 時価総額 (億円) = 最新株価 * 調整後発行済株式数
         (met.current_price * fin.adj_shares_outstanding / 100000000) as market_cap,
-        -- 営業利益率 (%)
         (fin.operating_profit / NULLIF(fin.net_sales, 0) * 100) as operating_margin_pct,
-        -- 自己資本比率 (%) (APIが少数の場合、*100)
         (fin.equity_to_asset_ratio * 100) as equity_ratio_pct,
-        -- 配当利回り (%) = 調整後予想配当 / 最新株価
         (fin.adj_dividend / NULLIF(met.current_price, 0) * 100) as dividend_yield_pct,
-        
-        -- 成長率: 今期予想 / 前期の本決算実績(過去15ヶ月間で最大売上を記録したレコード) - 1
-        -- 前期が0以下の場合は数学的に無意味・逆転現象が起きるため NULL とする
         CASE WHEN prev_fin.net_sales > 0 THEN (fin.forecast_net_sales / prev_fin.net_sales * 100 - 100) ELSE NULL END as revenue_growth_pct,
         CASE WHEN prev_fin.operating_profit > 0 THEN (fin.forecast_operating_profit / prev_fin.operating_profit * 100 - 100) ELSE NULL END as operating_profit_growth_pct,
         CASE WHEN prev_fin.profit > 0 THEN (fin.forecast_profit / prev_fin.profit * 100 - 100) ELSE NULL END as eps_growth_pct,
@@ -269,10 +266,10 @@ export async function calculateAndPopulateStocks() {
         ((met.min_low_200 - met.max_high_200) / NULLIF(met.max_high_200, 0) * 100) as max_drawdown,
         
         -- Valuation & Financials
-        (met.current_price / NULLIF(fin.ttm_eps, 0)) as per,
-        (met.current_price / NULLIF((fin.equity * 1000000 / fin.shares_outstanding), 0)) as pbr,
-        (fin.profit / NULLIF(fin.equity, 0) * 100) as roe,
-        (fin.profit / NULLIF(fin.total_assets, 0) * 100) as roa
+        (met.current_price / NULLIF((CASE WHEN fin.date = fin.prev_fy_date OR fin.prev_same_q_profit IS NULL THEN fin.latest_fy_profit ELSE (fin.latest_fy_profit + fin.profit - fin.prev_same_q_profit) END) / NULLIF(fin.adj_shares_outstanding, 0), 0)) as per,
+        (met.current_price / NULLIF(fin.equity / NULLIF(fin.shares_outstanding, 0), 0)) as pbr,
+        ((CASE WHEN fin.date = fin.prev_fy_date OR fin.prev_same_q_profit IS NULL THEN fin.latest_fy_profit ELSE (fin.latest_fy_profit + fin.profit - fin.prev_same_q_profit) END) / NULLIF(fin.equity, 0) * 100) as roe,
+        ((CASE WHEN fin.date = fin.prev_fy_date OR fin.prev_same_q_profit IS NULL THEN fin.latest_fy_profit ELSE (fin.latest_fy_profit + fin.profit - fin.prev_same_q_profit) END) / NULLIF(fin.total_assets, 0) * 100) as roa
 
       FROM equities_master m
       LEFT JOIN Metrics met ON m.ticker = met.ticker
