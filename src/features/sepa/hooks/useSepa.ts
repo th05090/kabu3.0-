@@ -14,6 +14,12 @@ export interface SepaTrendQueryParams {
   margin_expansion?: boolean;
   sweet_spot_cap?: boolean;
   min_liquidity?: boolean;
+  min_sales_growth?: number | null;
+  min_profit_growth?: number | null;
+  min_eps_growth?: number | null;
+  min_roe?: number | null;
+  annual_growth?: boolean;
+  strict_funda?: boolean;
   sort_by?: string | null;
   order?: 'asc' | 'desc';
 }
@@ -30,6 +36,12 @@ export function useSepaTrend(params: SepaTrendQueryParams) {
   if (params.margin_expansion) query.set('margin_expansion', 'true');
   if (params.sweet_spot_cap) query.set('sweet_spot_cap', 'true');
   if (params.min_liquidity) query.set('min_liquidity', 'true');
+  if (params.min_sales_growth != null) query.set('min_sales_growth', params.min_sales_growth.toString());
+  if (params.min_profit_growth != null) query.set('min_profit_growth', params.min_profit_growth.toString());
+  if (params.min_eps_growth != null) query.set('min_eps_growth', params.min_eps_growth.toString());
+  if (params.min_roe != null) query.set('min_roe', params.min_roe.toString());
+  if (params.annual_growth) query.set('annual_growth', 'true');
+  if (params.strict_funda) query.set('strict_funda', 'true');
   if (params.sort_by) query.set('sort_by', params.sort_by);
   if (params.order) query.set('order', params.order);
 
@@ -56,7 +68,9 @@ export function useSepaVcp(
   limit: number = 50,
   sortBy?: string | null,
   order?: 'asc' | 'desc',
-  excludeEtf: boolean = true
+  excludeEtf: boolean = true,
+  sweetSpotCap?: boolean,
+  minLiquidity?: boolean
 ) {
   const query = new URLSearchParams({
     mode,
@@ -64,6 +78,8 @@ export function useSepaVcp(
     limit: limit.toString(),
     exclude_etf: excludeEtf ? 'true' : 'false',
   });
+  if (sweetSpotCap) query.set('sweet_spot_cap', 'true');
+  if (minLiquidity) query.set('min_liquidity', 'true');
   if (sortBy) query.set('sort_by', sortBy);
   if (order) query.set('order', order);
 

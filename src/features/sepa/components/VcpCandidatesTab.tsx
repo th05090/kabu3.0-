@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useSepaVcp, useSepaDiagnostics } from '../hooks/useSepa';
 import { SepaPriceChart } from './SepaPriceChart';
 import { SepaSortHeader } from './SepaSortHeader';
+import { Tier2ScoreBadges } from './Tier2ScoreBadges';
 import { Target, Zap, Activity, VolumeX, ExternalLink, CheckCircle2, Building2 } from 'lucide-react';
 import { SepaStockRecord } from '../types/sepa';
 
@@ -14,12 +15,14 @@ interface VcpCandidatesTabProps {
 export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
   const [mode, setMode] = useState<string>('near_pivot');
   const [excludeEtf, setExcludeEtf] = useState<boolean>(true);
+  const [sweetSpotCap, setSweetSpotCap] = useState<boolean>(false);
+  const [minLiquidity, setMinLiquidity] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
 
-  const { candidates, total, isLoading } = useSepaVcp(mode, page, 50, sortBy, order, excludeEtf);
+  const { candidates, total, isLoading } = useSepaVcp(mode, page, 50, sortBy, order, excludeEtf, sweetSpotCap, minLiquidity);
   const { diagnostics, isLoading: diagLoading } = useSepaDiagnostics(selectedTicker);
 
   const handleSort = (field: string) => {
@@ -72,10 +75,11 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
           </button>
           <button
             onClick={() => handleModeChange('strict_funda')}
-            className={`sepa-chip ${mode === 'strict_funda' ? 'active-purple' : ''}`}
+            className={`sepa-chip ${mode === 'strict_funda' ? 'active-emerald' : ''}`}
+            title="Stage 2（RS>=80）かつ 直近四半期EPS+20%以上（または黒字転換）かつ 直近四半期売上+10%以上のコア成長株"
           >
             <CheckCircle2 size={14} />
-            Stage2 + 全ファンダ
+            Stage2 + コア成長 (Tier 1)
           </button>
           <button
             onClick={() => handleModeChange('all')}
@@ -95,6 +99,22 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
             <Building2 size={13} />
             株式のみ (投信除外)
           </button>
+
+          <button
+            onClick={() => { setSweetSpotCap(!sweetSpotCap); setPage(1); }}
+            className={`sepa-chip ${sweetSpotCap ? 'active-amber' : ''}`}
+            title="時価総額100〜1,000億円の中小型スイートスポット銘柄に限定"
+          >
+            時価総額 100〜1,000億
+          </button>
+
+          <button
+            onClick={() => { setMinLiquidity(!minLiquidity); setPage(1); }}
+            className={`sepa-chip ${minLiquidity ? 'active-blue' : ''}`}
+            title="5日平均売買代金1億円以上"
+          >
+            売買代金 &gt;= 1億
+          </button>
         </div>
 
         <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
@@ -105,8 +125,8 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
 
       {/* 2ペイン分割: 左テーブル ＆ 右目視チャート */}
       <div className="sepa-split-layout">
-        {/* 左: 候補テーブル */}
-        <div className="sepa-table-wrapper" style={{ maxHeight: '620px' }}>
+        {/* 左: 銘柄一覧テーブル */}
+        <div className="sepa-table-wrapper" style={{ flex: 1, minWidth: '460px' }}>
           <table className="sepa-table">
             <thead>
               <tr>
@@ -146,6 +166,11 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
               ) : (
                 candidates.map((s: SepaStockRecord) => {
                   const isSelected = selectedTicker === s.ticker;
+                  const isTier1 = Boolean(
+                    s.is_trend_template_pass &&
+                    s.sales_yoy_pct != null && s.sales_yoy_pct >= 10.0 &&
+                    ((s.eps_yoy_pct != null && s.eps_yoy_pct >= 20.0) || s.growth_status === 'TURNAROUND')
+                  );
 
                   return (
                     <tr
@@ -154,7 +179,17 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                       className={isSelected ? 'selected' : ''}
                     >
                       <td>
-                        <div style={{ fontWeight: 600, color: '#f1f5f9' }}>{s.name}</div>
+                        <div style={{ fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                            <span>{s.name}</span>
+                            {isTier1 && (
+                              <span className="sepa-badge-tier1" style={{ fontSize: '0.6rem', padding: '0.08rem 0.3rem' }}>
+                                Tier 1
+                              </span>
+                            )}
+                          </div>
+                          <Tier2ScoreBadges stock={s} compact />
+                        </div>
                         <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{s.ticker} | RS {s.rs_rating}</div>
                       </td>
                       <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>

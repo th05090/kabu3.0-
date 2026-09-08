@@ -12,14 +12,20 @@ export async function GET(req: Request) {
     const limit = Math.min(100, Math.max(10, parseInt(searchParams.get('limit') || '50')));
     const offset = (page - 1) * limit;
 
-    const filter = searchParams.get('filter') || 'all_pass'; // 'all_pass', 'all', 'ipo_only', 'turnaround'
-    const minRs = searchParams.get('min_rs') ? parseInt(searchParams.get('min_rs')!) : null;
-    const search = searchParams.get('search')?.trim();
-    const excludeEtf = searchParams.get('exclude_etf') !== 'false'; // デフォルトで投信・ETF等を除外 (true)
+    const filter = searchParams.get('filter') || 'tier1';
+    const excludeEtf = searchParams.get('exclude_etf') !== 'false';
+    const minRs = searchParams.get('min_rs') ? Number(searchParams.get('min_rs')) : null;
     const accelerating = searchParams.get('accelerating') === 'true';
     const marginExpansion = searchParams.get('margin_expansion') === 'true';
-    const sweetSpotCap = searchParams.get('sweet_spot_cap') === 'true'; // 100〜1,000億円
-    const minLiquidity = searchParams.get('min_liquidity') === 'true'; // 売売代金1億円以上
+    const sweetSpotCap = searchParams.get('sweet_spot_cap') === 'true';
+    const minLiquidity = searchParams.get('min_liquidity') === 'true';
+    const minSalesGrowth = searchParams.get('min_sales_growth') ? Number(searchParams.get('min_sales_growth')) : null;
+    const minProfitGrowth = searchParams.get('min_profit_growth') ? Number(searchParams.get('min_profit_growth')) : null;
+    const minEpsGrowth = searchParams.get('min_eps_growth') ? Number(searchParams.get('min_eps_growth')) : null;
+    const minRoe = searchParams.get('min_roe') ? Number(searchParams.get('min_roe')) : null;
+    const annualGrowth = searchParams.get('annual_growth') === 'true';
+    const strictFunda = searchParams.get('strict_funda') === 'true';
+    const search = searchParams.get('search') || '';
 
     const conditions: string[] = ['1 = 1'];
     const args: any[] = [];
@@ -28,7 +34,12 @@ export async function GET(req: Request) {
       conditions.push('is_operating_company = 1');
     }
 
-    if (filter === 'all_pass') {
+    if (filter === 'tier1') {
+      // Tier 1 (基本ハードフィルター): Stage 2 + 直近Q売上+10%↑ + 直近Q EPS+20%↑(または黒字転換)
+      conditions.push('is_trend_template_pass = 1');
+      conditions.push('sales_yoy_pct >= 10.0');
+      conditions.push('(eps_yoy_pct >= 20.0 OR growth_status = \'TURNAROUND\')');
+    } else if (filter === 'all_pass') {
       conditions.push('is_trend_template_pass = 1');
     } else if (filter === 'ipo_only') {
       conditions.push('is_ipo = 1');
@@ -47,6 +58,41 @@ export async function GET(req: Request) {
 
     if (marginExpansion) {
       conditions.push('is_margin_expanding = 1');
+    }
+
+    if (minSalesGrowth != null) {
+      conditions.push('sales_yoy_pct >= ?');
+      args.push(minSalesGrowth);
+    }
+
+    if (minProfitGrowth != null) {
+      conditions.push('(op_yoy_pct >= ? OR ordinary_profit_yoy_pct >= ? OR growth_status = \'TURNAROUND\')');
+      args.push(minProfitGrowth, minProfitGrowth);
+    }
+
+    if (minEpsGrowth != null) {
+      conditions.push('(eps_yoy_pct >= ? OR growth_status = \'TURNAROUND\')');
+      args.push(minEpsGrowth);
+    }
+
+    if (minRoe != null) {
+      conditions.push('roe >= ?');
+      args.push(minRoe);
+    }
+
+    if (annualGrowth) {
+      conditions.push('has_3y_annual_growth = 1');
+    }
+
+    // 厳格ファンダメンタルズ一括適用 (純粋財務条件1〜7のみ。時価総額・流動性は独立)
+    if (strictFunda) {
+      conditions.push('sales_yoy_pct >= 15.0');
+      conditions.push('(op_yoy_pct >= 20.0 OR ordinary_profit_yoy_pct >= 20.0 OR growth_status = \'TURNAROUND\')');
+      conditions.push('(eps_yoy_pct >= 20.0 OR growth_status = \'TURNAROUND\')');
+      conditions.push('is_growth_accelerating = 1');
+      conditions.push('is_margin_expanding = 1');
+      conditions.push('has_3y_annual_growth = 1');
+      conditions.push('roe >= 15.0');
     }
 
     if (sweetSpotCap) {
@@ -71,6 +117,13 @@ export async function GET(req: Request) {
     });
     const total = Number(countRes.rows[0]?.total || 0);
 
+    const fundaScoreExpr = `(
+      (CASE WHEN is_growth_accelerating = 1 THEN 1 ELSE 0 END) +
+      (CASE WHEN is_margin_expanding = 1 THEN 1 ELSE 0 END) +
+      (CASE WHEN has_3y_annual_growth = 1 THEN 1 ELSE 0 END) +
+      (CASE WHEN roe >= 15.0 THEN 1 ELSE 0 END)
+    )`;
+
     const validSortColumns: Record<string, string> = {
       ticker: 'ticker',
       current_price: 'current_price',
@@ -80,6 +133,7 @@ export async function GET(req: Request) {
       sales_yoy_pct: 'sales_yoy_pct',
       eps_yoy_pct: 'eps_yoy_pct',
       market_cap: 'market_cap',
+      funda_score: fundaScoreExpr,
     };
 
     const sortBy = searchParams.get('sort_by');
@@ -88,12 +142,16 @@ export async function GET(req: Request) {
     let orderSql = 'ORDER BY is_trend_template_pass DESC, rs_rating DESC, distance_to_high_52w_pct DESC';
     if (sortBy && validSortColumns[sortBy]) {
       const col = validSortColumns[sortBy];
-      orderSql = `ORDER BY ${col} IS NULL ASC, ${col} ${order}`;
+      if (sortBy === 'funda_score') {
+        orderSql = `ORDER BY ${col} ${order}, rs_rating DESC`;
+      } else {
+        orderSql = `ORDER BY ${col} IS NULL ASC, ${col} ${order}`;
+      }
     }
 
     // データ取得
     const dataRes = await db.execute({
-      sql: `SELECT * FROM sepa_metrics 
+      sql: `SELECT *, ${fundaScoreExpr} as funda_score FROM sepa_metrics 
             WHERE ${whereClause} 
             ${orderSql}
             LIMIT ? OFFSET ?`,

@@ -62,6 +62,7 @@ export interface SepaFundamentalsMetrics {
   roe: number | null;
   market_cap: number | null;
   avg_trading_value_5d: number | null;
+  funda_score?: number; // Tier 2 発展ファンダ該当数スコア (0〜4)
 }
 
 // VCP・ピボット客観候補指標

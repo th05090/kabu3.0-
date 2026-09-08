@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useSepaTrend } from '../hooks/useSepa';
 import { TrendFilterControls } from './TrendFilterControls';
 import { ChecklistBadges } from './ChecklistBadges';
+import { Tier2ScoreBadges } from './Tier2ScoreBadges';
 import { SepaSortHeader } from './SepaSortHeader';
 import { ChevronLeft, ChevronRight, AlertTriangle, Sparkles, ExternalLink } from 'lucide-react';
 import { SepaStockRecord } from '../types/sepa';
@@ -14,13 +15,15 @@ interface TrendTemplateTabProps {
 
 export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
   const [page, setPage] = useState<number>(1);
-  const [filter, setFilter] = useState<string>('all_pass');
+  const [filter, setFilter] = useState<string>('tier1');
   const [excludeEtf, setExcludeEtf] = useState<boolean>(true);
-  const [minRs, setMinRs] = useState<number | null>(80);
-  const [accelerating, setAccelerating] = useState<boolean>(true);
-  const [marginExpansion, setMarginExpansion] = useState<boolean>(true);
-  const [sweetSpotCap, setSweetSpotCap] = useState<boolean>(true);
-  const [minLiquidity, setMinLiquidity] = useState<boolean>(true);
+  const [minRs, setMinRs] = useState<number | null>(null);
+  const [accelerating, setAccelerating] = useState<boolean>(false);
+  const [marginExpansion, setMarginExpansion] = useState<boolean>(false);
+  const [sweetSpotCap, setSweetSpotCap] = useState<boolean>(false);
+  const [minLiquidity, setMinLiquidity] = useState<boolean>(false);
+  const [roe15, setRoe15] = useState<boolean>(false);
+  const [annualGrowth, setAnnualGrowth] = useState<boolean>(false);
   const [search, setSearch] = useState<string>('');
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
@@ -35,6 +38,8 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
     margin_expansion: marginExpansion,
     sweet_spot_cap: sweetSpotCap,
     min_liquidity: minLiquidity,
+    min_roe: roe15 ? 15 : null,
+    annual_growth: annualGrowth,
     search: search.length >= 2 ? search : undefined,
     sort_by: sortBy,
     order: order,
@@ -56,13 +61,15 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
   };
 
   const handleReset = () => {
-    setFilter('all_pass');
+    setFilter('tier1');
     setExcludeEtf(true);
-    setMinRs(80);
-    setAccelerating(true);
-    setMarginExpansion(true);
-    setSweetSpotCap(true);
-    setMinLiquidity(true);
+    setMinRs(null);
+    setAccelerating(false);
+    setMarginExpansion(false);
+    setSweetSpotCap(false);
+    setMinLiquidity(false);
+    setRoe15(false);
+    setAnnualGrowth(false);
     setSearch('');
     setSortBy(null);
     setOrder('desc');
@@ -86,6 +93,10 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
         setSweetSpotCap={(b) => { setSweetSpotCap(b); setPage(1); }}
         minLiquidity={minLiquidity}
         setMinLiquidity={(b) => { setMinLiquidity(b); setPage(1); }}
+        roe15={roe15}
+        setRoe15={(b) => { setRoe15(b); setPage(1); }}
+        annualGrowth={annualGrowth}
+        setAnnualGrowth={(b) => { setAnnualGrowth(b); setPage(1); }}
         search={search}
         setSearch={(s) => { setSearch(s); setPage(1); }}
         onReset={handleReset}
@@ -95,7 +106,8 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
       <div className="sepa-table-meta">
         <div>
           該当銘柄数: <span style={{ fontWeight: 'bold', color: '#fff' }}>{total.toLocaleString()}</span> 件
-          {filter === 'all_pass' && <span style={{ marginLeft: '0.5rem', color: '#34d399', fontWeight: 600 }}>(Stage 2 上昇トレンド確定銘柄)</span>}
+          {filter === 'tier1' && <span style={{ marginLeft: '0.5rem', color: '#34d399', fontWeight: 600 }}>(Stage 2 + コア成長 Tier 1 適合銘柄)</span>}
+          {filter === 'all_pass' && <span style={{ marginLeft: '0.5rem', color: '#60a5fa', fontWeight: 600 }}>(Stage 2 上昇トレンド確定銘柄)</span>}
         </div>
         <div className="sepa-pagination">
           <span>{page} / {totalPages} ページ</span>
@@ -142,6 +154,9 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
               <SepaSortHeader field="eps_yoy_pct" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
                 四半期EPS YoY
               </SepaSortHeader>
+              <SepaSortHeader field="funda_score" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
+                ファンダ発展 (Tier 2)
+              </SepaSortHeader>
               <SepaSortHeader field="market_cap" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
                 時価総額
               </SepaSortHeader>
@@ -151,19 +166,24 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
+                <td colSpan={10} style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
                   データを読み込み中...
                 </td>
               </tr>
             ) : stocks.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
+                <td colSpan={10} style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
                   条件に合致する銘柄が見つかりませんでした。
                 </td>
               </tr>
             ) : (
               stocks.map((s: SepaStockRecord) => {
                 const isIpo = Boolean(s.is_ipo);
+                const isTier1 = Boolean(
+                  s.is_trend_template_pass &&
+                  s.sales_yoy_pct != null && s.sales_yoy_pct >= 10.0 &&
+                  ((s.eps_yoy_pct != null && s.eps_yoy_pct >= 20.0) || s.growth_status === 'TURNAROUND')
+                );
 
                 return (
                   <tr
@@ -171,9 +191,14 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
                     onClick={() => onSelectTicker(s.ticker)}
                   >
                     <td>
-                      <div style={{ fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <div style={{ fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                         {s.name}
                         <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'normal' }}>{s.ticker}</span>
+                        {isTier1 && (
+                          <span className="sepa-badge-tier1" title="Stage 2 + 売上+10%↑ + EPS+20%↑(または黒字転換)">
+                            Tier 1
+                          </span>
+                        )}
                         {isIpo && (
                           <span className="sepa-badge-ipo">
                             IPO
@@ -233,7 +258,7 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
                     </td>
                     <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>
                       {s.sales_yoy_pct != null ? (
-                        <span style={{ color: s.sales_yoy_pct >= 15 ? '#34d399' : '#cbd5e1', fontWeight: s.sales_yoy_pct >= 15 ? 700 : 500 }}>
+                        <span style={{ color: s.sales_yoy_pct >= 10 ? '#34d399' : '#cbd5e1', fontWeight: s.sales_yoy_pct >= 10 ? 700 : 500 }}>
                           {s.sales_yoy_pct > 0 ? `+${s.sales_yoy_pct.toFixed(1)}%` : `${s.sales_yoy_pct.toFixed(1)}%`}
                         </span>
                       ) : (
@@ -255,6 +280,9 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
                       {Boolean(s.has_accounting_noise_risk) && (
                         <span title="売上伴わない利益急増" style={{ marginLeft: '0.25rem', color: '#fbbf24' }}>⚠️</span>
                       )}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <Tier2ScoreBadges stock={s} />
                     </td>
                     <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#cbd5e1' }}>
                       {s.market_cap ? `${Math.round(s.market_cap).toLocaleString()} 億` : '---'}

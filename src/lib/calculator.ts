@@ -271,8 +271,8 @@ export async function calculateAndPopulateStocks() {
         
         -- Valuation & Financials
         (met.current_price / NULLIF((CASE WHEN fin.date = fin.prev_fy_date OR fin.prev_same_q_profit IS NULL THEN fin.latest_fy_profit ELSE (fin.latest_fy_profit + fin.profit - fin.prev_same_q_profit) END) / NULLIF(fin.adj_shares_outstanding, 0), 0)) as per,
-        (met.current_price / NULLIF(fin.equity / NULLIF(fin.shares_outstanding, 0), 0)) as pbr,
-        ((CASE WHEN fin.date = fin.prev_fy_date OR fin.prev_same_q_profit IS NULL THEN fin.latest_fy_profit ELSE (fin.latest_fy_profit + fin.profit - fin.prev_same_q_profit) END) / NULLIF(fin.equity, 0) * 100) as roe,
+        CASE WHEN fin.equity <= 0 THEN NULL ELSE (met.current_price / NULLIF(fin.equity / NULLIF(fin.shares_outstanding, 0), 0)) END as pbr,
+        CASE WHEN fin.equity <= 0 THEN NULL ELSE ((CASE WHEN fin.date = fin.prev_fy_date OR fin.prev_same_q_profit IS NULL THEN fin.latest_fy_profit ELSE (fin.latest_fy_profit + fin.profit - fin.prev_same_q_profit) END) / fin.equity * 100) END as roe,
         ((CASE WHEN fin.date = fin.prev_fy_date OR fin.prev_same_q_profit IS NULL THEN fin.latest_fy_profit ELSE (fin.latest_fy_profit + fin.profit - fin.prev_same_q_profit) END) / NULLIF(fin.total_assets, 0) * 100) as roa
 
       FROM equities_master m

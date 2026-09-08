@@ -16,6 +16,10 @@ interface TrendFilterControlsProps {
   setSweetSpotCap: (b: boolean) => void;
   minLiquidity: boolean;
   setMinLiquidity: (b: boolean) => void;
+  roe15: boolean;
+  setRoe15: (b: boolean) => void;
+  annualGrowth: boolean;
+  setAnnualGrowth: (b: boolean) => void;
   search: string;
   setSearch: (s: string) => void;
   onReset: () => void;
@@ -36,6 +40,10 @@ export function TrendFilterControls({
   setSweetSpotCap,
   minLiquidity,
   setMinLiquidity,
+  roe15,
+  setRoe15,
+  annualGrowth,
+  setAnnualGrowth,
   search,
   setSearch,
   onReset
@@ -57,11 +65,19 @@ export function TrendFilterControls({
 
         <div className="sepa-btn-group">
           <button
+            onClick={() => setFilter('tier1')}
+            className={`sepa-chip ${filter === 'tier1' ? 'active-emerald' : ''}`}
+            title="Stage 2（8条件）かつ 直近四半期EPS+20%以上（または黒字転換）かつ 直近四半期売上+10%以上のコア成長株"
+          >
+            <Sparkles size={13} />
+            ★ Stage 2 + コア成長 (Tier 1)
+          </button>
+          <button
             onClick={() => setFilter('all_pass')}
             className={`sepa-chip ${filter === 'all_pass' ? 'active-green' : ''}`}
           >
             <TrendingUp size={13} />
-            Stage 2 合格 (8/8)
+            Stage 2 全件 (8/8)
           </button>
           <button
             onClick={() => setFilter('ipo_only')}
@@ -86,10 +102,10 @@ export function TrendFilterControls({
         </div>
       </div>
 
-      {/* サブ条件 (ミネルヴィニ・ファンダメンタルズ条件) */}
+      {/* サブ条件 (ミネルヴィニ Tier 2 発展オプショントグル) */}
       <div className="sepa-filter-row-sub">
         <span className="sepa-filter-label">
-          <Filter size={12} /> ファンダ絞り込み:
+          <Filter size={12} /> Tier 2 発展トグル:
         </span>
 
         {/* 株式のみ (投信除外) */}
@@ -114,6 +130,7 @@ export function TrendFilterControls({
         <button
           onClick={() => setAccelerating(!accelerating)}
           className={`sepa-chip ${accelerating ? 'active-green' : ''}`}
+          title="当期売上またはEPSが前期より加速、かつ足切り水準クリア"
         >
           成長加速 (売上/EPS)
         </button>
@@ -122,8 +139,27 @@ export function TrendFilterControls({
         <button
           onClick={() => setMarginExpansion(!marginExpansion)}
           className={`sepa-chip ${marginExpansion ? 'active-cyan' : ''}`}
+          title="単体営業利益率が前年同期より改善"
         >
           単体営利率改善
+        </button>
+
+        {/* 3年連続増益 */}
+        <button
+          onClick={() => setAnnualGrowth(!annualGrowth)}
+          className={`sepa-chip ${annualGrowth ? 'active-purple' : ''}`}
+          title="過去3年間、年間EPSが連続成長（株式分割調整後adj_eps、IPOバイパス対応）"
+        >
+          3年連続増益
+        </button>
+
+        {/* ROE 15%↑ */}
+        <button
+          onClick={() => setRoe15(!roe15)}
+          className={`sepa-chip ${roe15 ? 'active-amber' : ''}`}
+          title="ROE 15%以上（債務超過企業は除外）"
+        >
+          ROE 15%↑
         </button>
 
         {/* 時価総額 100〜1000億 */}

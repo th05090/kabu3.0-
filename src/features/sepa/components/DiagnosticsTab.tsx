@@ -5,6 +5,7 @@ import { useSepaDiagnostics } from '../hooks/useSepa';
 import { SepaPriceChart } from './SepaPriceChart';
 import { RiskRewardPanel } from './RiskRewardPanel';
 import { ChecklistBadges } from './ChecklistBadges';
+import { Tier2ScoreBadges } from './Tier2ScoreBadges';
 import { Search, Sparkles, AlertCircle, FileText, CheckCircle2, XCircle } from 'lucide-react';
 
 interface DiagnosticsTabProps {
@@ -138,11 +139,12 @@ export function DiagnosticsTab({ initialTicker }: DiagnosticsTabProps) {
             <div className="sepa-card">
               <div className="sepa-card-header">
                 <span>2. 四半期単体ファンダメンタルズ</span>
+                <Tier2ScoreBadges stock={m} compact />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.75rem' }}>
                 <div className="sepa-info-row">
                   <span>売上高 YoY:</span>
-                  <span className="sepa-info-val" style={{ color: m.sales_yoy_pct && m.sales_yoy_pct >= 15 ? '#34d399' : '#f1f5f9' }}>
+                  <span className="sepa-info-val" style={{ color: m.sales_yoy_pct && m.sales_yoy_pct >= 10 ? '#34d399' : '#f1f5f9' }}>
                     {m.sales_yoy_pct ? `+${m.sales_yoy_pct.toFixed(1)}%` : '---'}
                   </span>
                 </div>
@@ -174,8 +176,14 @@ export function DiagnosticsTab({ initialTicker }: DiagnosticsTabProps) {
                 </div>
                 <div className="sepa-info-row">
                   <span>過去3年通期成長:</span>
-                  <span style={{ color: Boolean(m.has_3y_annual_growth) ? '#34d399' : '#64748b' }}>
+                  <span style={{ color: Boolean(m.has_3y_annual_growth) ? '#c084fc' : '#64748b' }}>
                     {Boolean(m.has_3y_annual_growth) ? '連続プラス成長' : '---'}
+                  </span>
+                </div>
+                <div className="sepa-info-row">
+                  <span>ROE:</span>
+                  <span className="sepa-info-val" style={{ color: m.roe != null && m.roe >= 15 ? '#fbbf24' : '#f1f5f9' }}>
+                    {m.roe != null ? `${m.roe.toFixed(1)}%` : '---'}
                   </span>
                 </div>
               </div>

@@ -669,15 +669,22 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
 - **`GET /api/sepa/trend`**
   - **用途**: `sepa_metrics` テーブルからStage 2トレンドテンプレート銘柄一覧を取得します。
   - **クエリパラメータ**:
-    - `filter`: `'all_pass'` (`is_trend_template_pass = 1`, デフォルト), `'all'`, `'ipo_only'` (`is_ipo = 1`), `'turnaround'` (`growth_status = 'TURNAROUND'`)
+    - `filter`: 
+      - `'tier1'`: Stage 2 + コア成長 (`is_trend_template_pass = 1 AND sales_yoy_pct >= 10.0 AND (eps_yoy_pct >= 20.0 OR growth_status = 'TURNAROUND')`, デフォルト推奨)
+      - `'all_pass'`: Stage 2 全件 (`is_trend_template_pass = 1`)
+      - `'ipo_only'`: IPO急成長株 (`is_ipo = 1`)
+      - `'turnaround'`: 黒字転換 (`growth_status = 'TURNAROUND'`)
+      - `'all'`: 全銘柄
     - `exclude_etf`: 投信・ETF・ETN・REIT等の非事業会社を除外 (`'true'` または未指定の場合 `is_operating_company = 1`、`'false'` で全銘柄)
-    - `min_rs`: RSレーティング下限（例: `70`）
-    - `accelerating`: `'true'` の場合 `is_growth_accelerating = 1`
-    - `margin_expansion`: `'true'` の場合 `is_margin_expanding = 1`
+    - `min_rs`: RSレーティング下限（例: `80`）
+    - `accelerating`: `'true'` の場合 成長加速 (`is_growth_accelerating = 1`。売上>=10%またはEPS>=15%ガード付き)
+    - `margin_expansion`: `'true'` の場合 営業利益率改善 (`is_margin_expanding = 1`)
+    - `min_roe`: ROE下限（%）（例: `15.0`。純資産ゼロ以下の債務超過はNULL判定で除外）
+    - `annual_growth`: `'true'` の場合 3期連続年間EPSプラス成長 (`has_3y_annual_growth = 1`)
     - `sweet_spot_cap`: `'true'` の場合 時価総額100〜1,000億円 (`market_cap >= 100 AND market_cap <= 1000`)
     - `min_liquidity`: `'true'` の場合 5日平均売買代金1億円以上 (`avg_trading_value_5d >= 1.0`)
     - `search`: ティッカーまたは銘柄名の部分一致検索
-    - `sort_by`: ソート対象カラム名 (`ticker`, `current_price`, `rs_rating`, `passed_conditions_count`, `stage2_entry_date`, `sales_yoy_pct`, `eps_yoy_pct`, `market_cap`)
+    - `sort_by`: ソート対象カラム名 (`ticker`, `current_price`, `rs_rating`, `passed_conditions_count`, `stage2_entry_date`, `sales_yoy_pct`, `eps_yoy_pct`, `funda_score`, `market_cap`)
     - `order`: 昇順/降順 (`'asc'` または `'desc'`, デフォルト `'desc'`)
     - `page`: ページ番号 (デフォルト `1`)
     - `limit`: 1ページあたりの件数 (デフォルト `50`, 最大 `100`)
@@ -685,11 +692,11 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
     ```json
     {
       "success": true,
-      "data": [ /* SepaStockRecord 配列 */ ],
-      "total": 125,
+      "data": [ /* SepaStockRecord 配列 (funda_score 含む) */ ],
+      "total": 241,
       "page": 1,
       "limit": 50,
-      "totalPages": 3
+      "totalPages": 5
     }
     ```
 
@@ -700,10 +707,12 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
       - `'near_pivot'`: ピボット接近中 (`is_near_pivot = 1`, デフォルト)
       - `'breakout'`: ブレイク直後 (`is_pivot_breakout = 1`)
       - `'vdu_dryup'`: 出来高枯渇 (`is_volume_dryup = 1`)
-      - `'strict_funda'`: Stage 2 + 全ファンダ適合 (`rs_rating >= 80` かつ 成長加速・利益率改善・時価総額100〜1,000億・売買代金1億以上)
+      - `'strict_funda'`: Stage 2 + コア成長 Tier 1 (`rs_rating >= 80` かつ 売上+10%↑, EPS+20%↑/黒字転換)
       - `'all'`: 全VCP候補 `(is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)`
+    - `sweet_spot_cap`: `'true'` の場合 時価総額100〜1,000億円のオーバーレイ
+    - `min_liquidity`: `'true'` の場合 5日平均売買代金1億円以上のオーバーレイ
     - `exclude_etf`: 投信・ETF・ETN・REIT等の非事業会社を除外 (`'true'` または未指定の場合 `is_operating_company = 1`、`'false'` で全銘柄)
-    - `sort_by`: ソート対象カラム名 (`ticker`, `current_price`, `pivot_price`, `pivot_distance_pct`, `atr_contraction_ratio`, `volume_dryup_ratio`, `rs_rating`)
+    - `sort_by`: ソート対象カラム名 (`ticker`, `current_price`, `pivot_price`, `pivot_distance_pct`, `atr_contraction_ratio`, `volume_dryup_ratio`, `rs_rating`, `funda_score`)
     - `order`: 昇順/降順 (`'asc'` または `'desc'`, デフォルト `'desc'`)
     - `page`: ページ番号 (デフォルト `1`)
     - `limit`: 1ページあたりの件数 (デフォルト `50`, 最大 `100`)
@@ -789,6 +798,25 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
      - ※直前四半期が未開示・欠損している場合は、決して1Qや2Qを引いて偽の数値を捏造せず、単体値算出不可（`is_irregular_period`）として安全に処理。
   5. **前年同期比較（YoY）の特定**: `period_end_date` の差分日数（300日〜420日）に基づいて前年同四半期を厳密に特定し成長率を算出。
 - **QoQ 成長率**: 前年同期の3ヶ月単独実績との前年同期比（YoY）を算出。
+- **ミネルヴィニ SEPA 2層型ファンダメンタルズ判定（Tier 1 & Tier 2）**:
+  - **Tier 1: 基本ハードフィルター（必須AND）**:
+    実戦的な成長株母集団を形成する中核条件。全条件の無分別なAND結合による過剰絞り込みを防ぎ、市場から優良な急成長株（約240銘柄）を適確に抽出：
+    1. **Stage 2 上昇トレンド（テクニカル8条件適合）**: `is_trend_template_pass = 1`
+    2. **直近四半期 EPS急成長**: 前年同期比 $+20\%$ 以上、または黒字転換（`TURNAROUND`）
+    3. **直近四半期 売上高成長**: 前年同期比 $+10\%$ 以上
+    4. **事業会社（株式）限定**: 投信・ETF・REIT等を除外（`is_operating_company = 1`）
+  - **Tier 2: 発展（スコアリング・バッジ表示・オプショントグル）**:
+    Tier 1 該当銘柄の中で、ミネルヴィニの理想条件の兼備状況を4点満点（0〜4）でスコアリング評価し、UIにバッジ表示・ソート対応。オプショントグルで任意絞り込み可能：
+    1. **成長加速（`is_growth_accelerating`）**:
+       - 単純な前期比比較による赤字縮小（-50% $\to$ -20%）や低成長（+1% $\to$ +3%）の誤検知を排除するため、「売上加速かつ売上YoY $\ge +10\%$」または「EPS加速かつEPS YoY $\ge +15\%$」を必須足切り水準とする。
+    2. **営業利益率の改善（`is_margin_expanding`）**:
+       - 直近四半期の営業利益率（OP / Sales） $>$ 前年同期の営業利益率。
+    3. **年間持続性（`has_3y_annual_growth`）**:
+       - 株式分割調整後EPS（`adj_eps`）で直近3年間連続プラス成長（赤字転落なし）。IPO株は開示年数に応じたバイパス判定（2期または1期）を適用。
+    4. **高ROE（`roe >= 15.0%`）**:
+       - 債務超過企業（純資産 $\le 0$）が「マイナス $\div$ マイナス」で正のROEとしてすり抜ける致命的トラップを排除し、債務超過時は強制的にNULL除外。
+    5. **時価総額スイートスポット & 最低流動性（独立オーバーレイ）**:
+       - 時価総額100〜1,000億円、5日平均売買代金1億円以上は独立トグルとして提供し、超大型主導株を純ファンダメンタルズから排除しない設計。
 - **ステータス判定（`growth_status`）**: 本業の収益力である営業利益（OP）の正負推移を主軸とし、投資的に妥当な判定を実施：
   - **黒字転換 (`TURNAROUND`)**: 前年同期が営業赤字（OP $\le 0$）から当期営業黒字（OP $> 0$）へ転換。または営業黒字維持下で純利益が黒字転換。
   - **赤字転落 (`DEFICIT_FALL`)**: 前年同期が営業黒字（OP $> 0$）から当期営業赤字（OP $\le 0$）へ転落（※営業利益が黒字を維持している場合は、特損等で最終赤字になってもDEFICIT_FALLにはせず特損リスク警告を付与）。
@@ -796,11 +824,11 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
   - **赤字拡大 (`LOSS_EXPANSION`)**: 前年営業赤字かつ当期営業赤字で、赤字幅が拡大（当期OP $\le$ 前年OP）。
   - **大成長 (`EXPLOSIVE_GROWTH`)**: 営業・純利ともに黒字で、EPS YoY $\ge +300\%$ かつ 売上YoY $\ge +10\%$。
   - **成長・黒字 (`GROWTH`)**: 通常の黒字成長。
-- **EPS加速 (`eps_acceleration`)**: 最新QのEPS成長率 > 前QのEPS成長率 かつ 最新Q成長率 $\ge +20\%$
+- **EPS加速 (`eps_acceleration`)**: 最新QのEPS成長率 > 前QのEPS成長率 かつ 最新Q成長率 $\ge +15\%$
 - **売上加速 (`sales_acceleration`)**: 最新Qの売上成長率 > 前Qの売上成長率 かつ 最新Q成長率 $\ge +10\%$
 - **営業利益率拡大 (`margin_expansion`)**: 最新Qの営業利益率（OP / Sales） > 前年同期の営業利益率
 - **Q4会計ノイズガード**: 売上YoYが+10%未満なのにEPSだけが急増（+300%以上）している場合、または営業黒字なのに最終赤字の場合は一過性の特殊要因（資産売却・特損等）とみなし、警告フラグ（`has_accounting_noise_risk: true`）を付与。
-- **スクリーナー指標（`calculator.ts`）との整合性**: スクリーナー（`stocks` テーブル）の最新決算指標（PER, PBR, ROE, 営業利益率等）抽出においても、実績空行を除外する `WHERE (net_sales IS NOT NULL OR operating_profit IS NOT NULL OR profit IS NOT NULL)` を適用し、全銘柄で数値の一致を担保。
+- **スクリーナー指標（`calculator.ts`）との整合性**: スクリーナー（`stocks` テーブル）の最新決算指標（PER, PBR, ROE, 営業利益率等）抽出においても、実績空行を除外する `WHERE (net_sales IS NOT NULL OR operating_profit IS NOT NULL OR profit IS NOT NULL)` を適用し、全銘柄で数値の一致を担保。債務超過銘柄のROE/PBRはNULL化。
 
 #### 7.2.2 トレンドテンプレート判定・掲載日算出 (`trend_calculator.ts`)
 ミネルヴィニのStage 2上昇トレンドを判定する8大条件：
@@ -1198,6 +1226,13 @@ LLM（とくにローカルのgemma3:12b等）は指定フォーマットを逸�
 | **ATR収縮比率 (`ATR10 / ATR50`)** | `< 0.70` | 短期10日ATRが長期50日ATRの70%未満（30%以上の値幅収縮）で収縮判定。 |
 | **出来高枯渇比率 (`Vol5 / Vol50`)** | `< 0.60` | 5日平均出来高が50日平均の60%以下（40%以上の枯渇）でVDU判定。 |
 | **ピボットブレイクアウト判定** | `0.0% 〜 +3.0%` かつ 当日出来高 >= 50日平均 × 1.5 | 健全ハンドルからピボットを出来高急増を伴って上放れた状態を即時検知。 |
+| **Tier 1 四半期売上高成長閾値** | `>= +10.0%` | 四半期単体売上高の前年同期比成長率（必須ハードフィルター）。 |
+| **Tier 1 四半期EPS急成長閾値** | `>= +20.0%` または `TURNAROUND` | 四半期単体EPSの前年同期比成長率（黒字転換も適格、必須ハードフィルター）。 |
+| **Tier 2 成長加速判定足切り** | 売上 `>= +10.0%` または EPS `>= +15.0%` | 赤字縮小や超低成長の加速偽シグナルを排除する必須足切り水準。 |
+| **Tier 2 年間EPS持続期間** | 過去 `3` 期連続プラス成長 | 株式分割調整後EPS（`adj_eps`）で3年連続増益（IPOバイパス: 2期/1期）。 |
+| **Tier 2 ROE適格水準** | `>= 15.0%` | 自己資本利益率15%以上（債務超過 `equity <= 0` はNULL除外）。 |
+| **時価総額スイートスポット** | `100億 〜 1,000億円` | ミネルヴィニが推奨する大化け株の最適時価総額レンジ（独立オーバーレイ）。 |
+| **最低流動性（5日平均売買代金）** | `>= 1.0億円` | 機関投資家の参入可能な最低出来高代金基準（独立オーバーレイ）。 |
 
 
 ## 10. 今後の課題・ロードマップ (Roadmap)

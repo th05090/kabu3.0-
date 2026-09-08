@@ -10,6 +10,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const mode = searchParams.get('mode') || 'near_pivot'; // 'near_pivot', 'breakout', 'vdu_dryup', 'all', 'strict_funda'
     const excludeEtf = searchParams.get('exclude_etf') !== 'false'; // デフォルトで投信・ETF等を除外 (true)
+    const sweetSpotCap = searchParams.get('sweet_spot_cap') === 'true'; // 時価総額100〜1,000億のオプショントグル
+    const minLiquidity = searchParams.get('min_liquidity') === 'true'; // 売買代金1億以上のオプショントグル
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const limit = Math.min(100, Math.max(10, parseInt(searchParams.get('limit') || '50')));
     const offset = (page - 1) * limit;
@@ -29,8 +31,22 @@ export async function GET(req: Request) {
       conditions.push('is_volume_dryup = 1');
     } else if (mode === 'all') {
       conditions.push('(is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)');
-    } else if (mode === 'strict_funda') {
-      conditions.push('rs_rating >= 80 AND is_growth_accelerating = 1 AND is_margin_expanding = 1 AND market_cap >= 100 AND market_cap <= 1000 AND avg_trading_value_5d >= 1.0');
+    } else if (mode === 'strict_funda' || mode === 'tier1_funda') {
+      // Tier 1 (基本ハードフィルター): RS>=80 + 売上+10%↑ + EPS+20%↑(または黒字転換)
+      conditions.push(`
+        rs_rating >= 80 
+        AND sales_yoy_pct >= 10.0 
+        AND (eps_yoy_pct >= 20.0 OR growth_status = 'TURNAROUND')
+      `);
+    }
+
+    // 時価総額・流動性は独立したオプショントグルとして重ね合わせ
+    if (sweetSpotCap) {
+      conditions.push('market_cap >= 100 AND market_cap <= 1000');
+    }
+
+    if (minLiquidity) {
+      conditions.push('avg_trading_value_5d >= 1.0');
     }
 
     const whereClause = conditions.join(' AND ');
@@ -41,6 +57,13 @@ export async function GET(req: Request) {
     });
     const total = Number(countRes.rows[0]?.total || 0);
 
+    const fundaScoreExpr = `(
+      (CASE WHEN is_growth_accelerating = 1 THEN 1 ELSE 0 END) +
+      (CASE WHEN is_margin_expanding = 1 THEN 1 ELSE 0 END) +
+      (CASE WHEN has_3y_annual_growth = 1 THEN 1 ELSE 0 END) +
+      (CASE WHEN roe >= 15.0 THEN 1 ELSE 0 END)
+    )`;
+
     const validSortColumns: Record<string, string> = {
       ticker: 'ticker',
       current_price: 'current_price',
@@ -49,6 +72,7 @@ export async function GET(req: Request) {
       atr_contraction_ratio: 'atr_contraction_ratio',
       volume_dryup_ratio: 'volume_dryup_ratio',
       rs_rating: 'rs_rating',
+      funda_score: fundaScoreExpr,
     };
 
     const sortBy = searchParams.get('sort_by');
@@ -57,11 +81,15 @@ export async function GET(req: Request) {
     let orderSql = 'ORDER BY is_pivot_breakout DESC, is_near_pivot DESC, pivot_distance_pct DESC, rs_rating DESC';
     if (sortBy && validSortColumns[sortBy]) {
       const col = validSortColumns[sortBy];
-      orderSql = `ORDER BY ${col} IS NULL ASC, ${col} ${order}`;
+      if (sortBy === 'funda_score') {
+        orderSql = `ORDER BY ${col} ${order}, rs_rating DESC`;
+      } else {
+        orderSql = `ORDER BY ${col} IS NULL ASC, ${col} ${order}`;
+      }
     }
 
     const dataRes = await db.execute({
-      sql: `SELECT * FROM sepa_metrics 
+      sql: `SELECT *, ${fundaScoreExpr} as funda_score FROM sepa_metrics 
             WHERE ${whereClause} 
             ${orderSql}
             LIMIT ? OFFSET ?`,

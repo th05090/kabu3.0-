@@ -149,27 +149,65 @@ export function calculateSepaFundamentals(
     }
   }
 
-  // 2. 成長の加速判定 (当四半期YoY > 前四半期YoY)
+  // 2. 成長の加速判定 (売上高またはEPSの当四半期YoY > 前四半期YoY かつ 最低成長水準を満たすこと)
+  // ※赤字縮小（-50% -> -20%）や超低成長（+1% -> +3%）を排除し、真のモメンタム加速のみを検知
   if (prevQuarter && standaloneList.length >= 6) {
     const prevQ_PrevYear = standaloneList[5];
-    if (prevQ_PrevYear && prevQuarter.standalone_sales > 0 && prevQ_PrevYear.standalone_sales > 0) {
-      const prevQ_salesYoY = ((prevQuarter.standalone_sales - prevQ_PrevYear.standalone_sales) / prevQ_PrevYear.standalone_sales) * 100;
-      if (defaultRes.sales_yoy_pct != null && defaultRes.sales_yoy_pct > prevQ_salesYoY) {
-        defaultRes.is_growth_accelerating = true;
+    if (prevQ_PrevYear && !prevQuarter.is_irregular_period && !prevQ_PrevYear.is_irregular_period) {
+      // 売上高の加速チェック (当期YoY > 前期YoY かつ 当期売上YoY >= +10.0%)
+      let isSalesAccelerating = false;
+      if (prevQuarter.standalone_sales > 0 && prevQ_PrevYear.standalone_sales > 0) {
+        const prevQ_salesYoY = ((prevQuarter.standalone_sales - prevQ_PrevYear.standalone_sales) / prevQ_PrevYear.standalone_sales) * 100;
+        const curSalesYoY = defaultRes.sales_yoy_pct;
+        if (curSalesYoY != null && curSalesYoY > prevQ_salesYoY && curSalesYoY >= 10.0) {
+          isSalesAccelerating = true;
+        }
       }
+
+      // EPSの加速チェック (当期YoY > 前期YoY かつ 当期EPS YoY >= +15.0%)
+      let isEpsAccelerating = false;
+      if (prevQuarter.standalone_eps > 0 && prevQ_PrevYear.standalone_eps > 0) {
+        const prevQ_epsYoY = ((prevQuarter.standalone_eps - prevQ_PrevYear.standalone_eps) / prevQ_PrevYear.standalone_eps) * 100;
+        const curEpsYoY = defaultRes.eps_yoy_pct;
+        if (curEpsYoY != null && curEpsYoY > prevQ_epsYoY && curEpsYoY >= 15.0) {
+          isEpsAccelerating = true;
+        }
+      }
+
+      defaultRes.is_growth_accelerating = isSalesAccelerating || isEpsAccelerating;
     }
   }
 
-  // 3. 過去3期の通期EPS持続性判定 (通期レコードのみを抽出して比較)
-  const fyRecords = rows.filter(r => (r.net_sales || 0) > 0)
-    .sort((a, b) => b.date.localeCompare(a.date));
-  
-  // 売上が年々最大となる本決算候補を3期抽出
-  if (fyRecords.length >= 3) {
-    const eps0 = fyRecords[0].adj_eps ?? 0;
-    const eps1 = fyRecords[1].adj_eps ?? 0;
-    const eps2 = fyRecords[2].adj_eps ?? 0;
+  // 3. 過去3期の通期EPS持続性判定 (株式分割遡及済みの adj_eps を用いて比較)
+  // 通期本決算 (FY) レコードのみを抽出して比較
+  const fyRecords = rows
+    .filter(r => (r.fiscal_quarter === 'FY' || r.net_sales != null) && (r.net_sales || 0) > 0)
+    .sort((a, b) => (b.period_end_date || b.date).localeCompare(a.period_end_date || a.date));
+
+  // 重複期末日を除去
+  const uniqueFy: RawFinancialRow[] = [];
+  const seenFy = new Set<string>();
+  for (const r of fyRecords) {
+    const key = r.period_end_date || r.date.slice(0, 4);
+    if (!seenFy.has(key)) {
+      seenFy.add(key);
+      uniqueFy.push(r);
+    }
+  }
+
+  if (uniqueFy.length >= 3) {
+    const eps0 = uniqueFy[0].adj_eps ?? 0;
+    const eps1 = uniqueFy[1].adj_eps ?? 0;
+    const eps2 = uniqueFy[2].adj_eps ?? 0;
     defaultRes.has_3y_annual_growth = (eps0 > eps1) && (eps1 > eps2) && (eps2 > 0);
+  } else if (uniqueFy.length === 2) {
+    // IPO新興株バイパス: 上場後2期の場合
+    const eps0 = uniqueFy[0].adj_eps ?? 0;
+    const eps1 = uniqueFy[1].adj_eps ?? 0;
+    defaultRes.has_3y_annual_growth = (eps0 > eps1) && (eps1 > 0);
+  } else if (uniqueFy.length === 1) {
+    // IPO新興株バイパス: 上場直後1期の場合
+    defaultRes.has_3y_annual_growth = (uniqueFy[0].adj_eps ?? 0) > 0;
   }
 
   return defaultRes;
