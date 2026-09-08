@@ -7,6 +7,7 @@ import { SepaSortHeader } from './SepaSortHeader';
 import { Tier2ScoreBadges } from './Tier2ScoreBadges';
 import { Target, Zap, Activity, VolumeX, ExternalLink, CheckCircle2, Building2 } from 'lucide-react';
 import { SepaStockRecord } from '../types/sepa';
+import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
 interface VcpCandidatesTabProps {
   onSelectTicker: (ticker: string) => void;
@@ -190,7 +191,20 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                           </div>
                           <Tier2ScoreBadges stock={s} compact />
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{s.ticker} | RS {s.rs_rating}</div>
+                        {(() => {
+                          const gics = s.gics_sub_industry_id ? GICS_DICTIONARY[s.gics_sub_industry_id] : null;
+                          const tooltip = gics 
+                            ? `GICS: ${gics.sector_name} > ${gics.industry_name} > ${gics.sub_industry_name}\n(東証33業種: ${s.industry})` 
+                            : `東証33業種: ${s.industry}`;
+                          return (
+                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.15rem' }} title={tooltip}>
+                              <span style={{ color: gics ? '#38bdf8' : '#94a3b8', fontWeight: gics ? 500 : 400 }}>
+                                {gics ? gics.sub_industry_name : s.industry}
+                              </span>
+                              <span style={{ color: '#64748b' }}> | RS {s.rs_rating}</span>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
                         {s.current_price.toLocaleString()}円
@@ -246,7 +260,17 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                 <div>
                   <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     {diagnostics.metrics.name} ({diagnostics.metrics.ticker})
-                    <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#94a3b8' }}>{diagnostics.metrics.industry}</span>
+                    {(() => {
+                      const gics = diagnostics.metrics.gics_sub_industry_id ? GICS_DICTIONARY[diagnostics.metrics.gics_sub_industry_id] : null;
+                      return (
+                        <span 
+                          style={{ fontSize: '0.75rem', fontWeight: 'normal', color: gics ? '#38bdf8' : '#94a3b8' }}
+                          title={gics ? `東証33業種: ${diagnostics.metrics.industry}` : undefined}
+                        >
+                          {gics ? `${gics.sector_name} / ${gics.sub_industry_name}` : diagnostics.metrics.industry}
+                        </span>
+                      );
+                    })()}
                   </h3>
                   <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.2rem' }}>
                     {diagnostics.metrics.base_high && diagnostics.metrics.base_high !== diagnostics.metrics.pivot_price && (

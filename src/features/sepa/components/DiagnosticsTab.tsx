@@ -7,6 +7,7 @@ import { RiskRewardPanel } from './RiskRewardPanel';
 import { ChecklistBadges } from './ChecklistBadges';
 import { Tier2ScoreBadges } from './Tier2ScoreBadges';
 import { Search, Sparkles, AlertCircle, FileText, CheckCircle2, XCircle } from 'lucide-react';
+import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
 interface DiagnosticsTabProps {
   initialTicker?: string | null;
@@ -64,9 +65,23 @@ export function DiagnosticsTab({ initialTicker }: DiagnosticsTabProps) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fff', margin: 0 }}>{m.name}</h2>
                 <span style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#94a3b8' }}>{m.ticker}</span>
-                <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: '#94a3b8' }}>
-                  {m.industry} | {m.market}
-                </span>
+                {(() => {
+                  const gics = m.gics_sub_industry_id ? GICS_DICTIONARY[m.gics_sub_industry_id] : null;
+                  const tooltip = gics 
+                    ? `GICS: ${gics.sector_name} > ${gics.industry_name} > ${gics.sub_industry_name}\n(東証33業種: ${m.industry})` 
+                    : `東証33業種: ${m.industry}`;
+                  return (
+                    <span 
+                      style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: '#94a3b8' }}
+                      title={tooltip}
+                    >
+                      <span style={{ color: gics ? '#38bdf8' : '#94a3b8', fontWeight: gics ? 500 : 400 }}>
+                        {gics ? `${gics.sector_name} / ${gics.sub_industry_name}` : m.industry}
+                      </span>
+                      <span style={{ color: '#64748b' }}> | {m.market}</span>
+                    </span>
+                  );
+                })()}
                 {Boolean(m.is_ipo) && (
                   <span className="sepa-badge-ipo">
                     IPO

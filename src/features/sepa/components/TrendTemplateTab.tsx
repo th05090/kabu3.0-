@@ -8,6 +8,7 @@ import { Tier2ScoreBadges } from './Tier2ScoreBadges';
 import { SepaSortHeader } from './SepaSortHeader';
 import { ChevronLeft, ChevronRight, AlertTriangle, Sparkles, ExternalLink } from 'lucide-react';
 import { SepaStockRecord } from '../types/sepa';
+import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
 interface TrendTemplateTabProps {
   onSelectTicker: (ticker: string) => void;
@@ -205,7 +206,20 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.15rem' }}>{s.industry} | {s.market}</div>
+                      {(() => {
+                        const gics = s.gics_sub_industry_id ? GICS_DICTIONARY[s.gics_sub_industry_id] : null;
+                        const tooltip = gics 
+                          ? `GICS: ${gics.sector_name} > ${gics.industry_name} > ${gics.sub_industry_name}\n(東証33業種: ${s.industry})` 
+                          : `東証33業種: ${s.industry}`;
+                        return (
+                          <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.15rem' }} title={tooltip}>
+                            <span style={{ color: gics ? '#38bdf8' : '#94a3b8', fontWeight: gics ? 500 : 400 }}>
+                              {gics ? gics.sub_industry_name : s.industry}
+                            </span>
+                            <span style={{ color: '#64748b' }}> | {s.market}</span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
                       {s.current_price.toLocaleString()} 円

@@ -461,7 +461,8 @@ CREATE TABLE IF NOT EXISTS sepa_metrics (
   is_volume_dryup INTEGER,
   ir_catalyst_count INTEGER,
   latest_ir_title TEXT,
-  latest_ir_date TEXT
+  latest_ir_date TEXT,
+  gics_sub_industry_id TEXT
 );
 ```
 
@@ -548,7 +549,9 @@ export interface SepaStockRecord extends SepaTrendMetrics, SepaRsMetrics, SepaFu
   name: string;
   market: string;
   industry: string;
+  is_operating_company: boolean;
   latest_date: string;
+  gics_sub_industry_id?: string | null;
   ir_catalyst_count?: number;
   latest_ir_title?: string;
   latest_ir_date?: string;

@@ -108,7 +108,8 @@ export async function ensureSepaTable() {
       is_volume_dryup INTEGER,
       ir_catalyst_count INTEGER,
       latest_ir_title TEXT,
-      latest_ir_date TEXT
+      latest_ir_date TEXT,
+      gics_sub_industry_id TEXT
     )
   `);
 
@@ -116,9 +117,13 @@ export async function ensureSepaTable() {
   try {
     const tableInfo = await db.execute(`PRAGMA table_info(sepa_metrics)`);
     if (tableInfo.rows && tableInfo.rows.length > 0) {
-      const hasCol = tableInfo.rows.some(r => r.name === 'is_operating_company');
-      if (!hasCol) {
+      const hasOpCol = tableInfo.rows.some(r => r.name === 'is_operating_company');
+      if (!hasOpCol) {
         await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN is_operating_company INTEGER DEFAULT 1`);
+      }
+      const hasGicsCol = tableInfo.rows.some(r => r.name === 'gics_sub_industry_id');
+      if (!hasGicsCol) {
+        await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN gics_sub_industry_id TEXT`);
       }
     }
   } catch (e) {
@@ -126,6 +131,7 @@ export async function ensureSepaTable() {
   }
 
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_sepa_operating ON sepa_metrics (is_operating_company)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_sepa_gics ON sepa_metrics (gics_sub_industry_id)`);
 }
 
 /**
@@ -140,7 +146,7 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
 
   // 1. 全銘柄のマスタ・株価指標 (stocks) を取得
   const stocksRes = await db.execute(`
-    SELECT ticker, name, market, industry, market_cap, avg_trading_value_5d, roe
+    SELECT ticker, name, market, industry, market_cap, avg_trading_value_5d, roe, gics_sub_industry_id
     FROM stocks
   `);
   const stockMap = new Map<string, any>();
@@ -284,7 +290,7 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?
+        ?, ?, ?, ?
       )`,
       args: [
         ticker, s.name, s.market, s.industry, isOp ? 1 : 0, quotes[0].date,
@@ -304,7 +310,8 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
         vcp.pivot_price, vcp.pivot_distance_pct, vcp.is_near_pivot ? 1 : 0, vcp.is_pivot_breakout ? 1 : 0, vcp.is_handle_healthy ? 1 : 0,
         vcp.atr_10, vcp.atr_50, vcp.atr_contraction_ratio, vcp.is_volatility_contracted ? 1 : 0,
         vcp.volume_5d_avg, vcp.volume_50d_avg, vcp.volume_dryup_ratio, vcp.is_volume_dryup ? 1 : 0,
-        ir?.cnt || 0, ir?.title || null, ir?.date || null
+        ir?.cnt || 0, ir?.title || null, ir?.date || null,
+        s.gics_sub_industry_id || null
       ]
     });
 
