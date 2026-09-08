@@ -95,6 +95,21 @@ graph TD
 - **企業プロファイル情報**:
   - 四季報からクレンジング抽出された「特徴要約」「関連キーワード」および、AIが判定した「GICSサブ産業カテゴリ」と「テーマ」を表示します。
 
+### 2.4 SEPA (ミネルヴィニ分析) 画面 (`src/app/sepa/page.tsx`)
+マーク・ミネルヴィニ（Mark Minervini）の SEPA (Specific Entry Point Analysis) 手法に基づく、トレンドテンプレート選定およびVCP（ボラティリティ収縮パターン）ブレイクアウト候補スクリーニング画面です（`SepaDashboard`）。
+
+- **トレンドテンプレートタブ (`TrendTemplateTab`)**:
+  - 8つのステージ2条件を満たした銘柄群を一覧表示。
+  - ファンダメンタルフィルター（EPS加速、売上加速、マージン拡大、黒字転換）による動的絞り込み。
+  - RS（レラティブストレングス）ランキング順、または「掲載日（Stage2突入日）」によるソートが可能。リスト復帰時にも最新の突入日を表示。
+- **VCP・セットアップ候補タブ (`VcpCandidatesTab`)**:
+  - トレンドテンプレート合格銘柄の中から、ベース形成（20〜65日）およびピボット形成（直近2〜15日）を経たブレイクアウト直前・直後の銘柄を抽出。
+  - 左ペイン（候補銘柄一覧）と右ペイン（クイック詳細プレビュー）の2ペイン構成。
+  - チャート上にはベース期間高値（ベースレジスタンス：橙色点線）と真のピボット（ピボットライン：金色破線）を分離表示。
+- **個別銘柄SEPA診断タブ (`DiagnosticsTab`)**:
+  - 銘柄コード入力により、当該銘柄のSEPA適合状況（Stage2の8条件、ファンダメンタル4項目、VCP健全性ガード）を一目で判定する個別詳細診断ビュー。
+  - リスクリワード計算パネル（ピボット基準の損切り価格、目標価格、R:R比率）を搭載。
+
 
 ## 3. システムアーキテクチャと設計思想 (Architecture & Design Principles)
 
@@ -272,6 +287,12 @@ J-Quantsから取得した日足株価、財務情報、および株式分割履
   - `id` (TEXT PK): ドキュメントID
   - `ticker`, `title`, `date`, `pdf_path` (TEXT): 取得したIR資料の基本情報とローカル保存パス
   - `analyzed` (INTEGER): DoclingパースおよびAIメタデータ抽出が完了したかどうかのフラグ（0: 未解析, 1: 解析済）
+- **`sepa_metrics` (SEPA指標・VCP候補キャッシュ)**
+  - `ticker` (TEXT PK): 銘柄コード
+  - トレンド指標: `is_stage2` (INTEGER), `sma50_above_sma150` (INTEGER), `sma150_above_sma200` (INTEGER), `sma200_trending_up` (INTEGER), `above_52w_low_pct` (REAL), `within_52w_high_pct` (REAL), `slope_22` (REAL), `rs_rating` (INTEGER), `stage2_entry_date` (TEXT)
+  - ファンダメンタル指標: `eps_acceleration` (INTEGER), `sales_acceleration` (INTEGER), `margin_expansion` (INTEGER), `is_turnaround` (INTEGER), `latest_q_eps_growth` (REAL), `latest_q_sales_growth` (REAL)
+  - VCP・ピボット指標: `is_vcp_candidate` (INTEGER), `atr_contraction_ratio` (REAL), `volume_dryup_ratio` (REAL), `pivot_price` (REAL), `base_high` (REAL), `base_depth_pct` (REAL), `is_handle_healthy` (INTEGER), `distance_to_pivot_pct` (REAL), `is_breakout` (INTEGER)
+  - 管理情報: `updated_at` (TEXT)
 
 #### 5.1.3 アプリケーション状態管理系テーブル
 スクリーナー表示用の計算済みキャッシュや、ユーザー定義のデータ、システムバッチの状態を管理します。
@@ -357,6 +378,19 @@ Next.jsのAPIコンテキストから、独立したNode.jsのバックグラウ
     2. J-Quantsの更新をトリガーとしつつ、ローカルに実在する最新のPDFファイルを逆引きして参照。新規の「決算短信PDF」が存在する場合にのみパース、セグメント情報抽出を実行します。過去決算が存在する場合は差分比較を、存在しない場合は単独分析によるAIアナリストレポートの自動生成を行います（`processEarningsReports` -> `generateAiReport`）。
     3. テクニカル・ファンダメンタル指標の再計算と `stocks` テーブルの更新（`calculateAndPopulateStocks`）。
   - **レスポンス**: `text/event-stream` (Server-Sent Events) でストリーミングされ、各処理ステップで `{"type": "progress", "message": "..."}` を返し、完了時に `{"type": "done"}` を返します。
+
+### 6.5 SEPA (ミネルヴィニ分析) BFF API群
+SEPAダッシュボードおよび個別診断ビューをサポートするRoute Handlers群です。
+
+- **`GET /api/sepa/trend`**
+  - **用途**: `sepa_metrics` テーブルから `is_stage2 = 1` の銘柄一覧を取得します。
+  - **クエリパラメータ**: `epsAccel`, `salesAccel`, `marginExp`, `turnaround` (各 'true'/'false' でファンダメンタル条件を動的フィルタリング)。
+- **`GET /api/sepa/vcp-candidates`**
+  - **用途**: `is_stage2 = 1` かつ `is_vcp_candidate = 1` の銘柄一覧を取得します。
+  - **ソート**: ピボットまでの距離（`distance_to_pivot_pct ASC`）順でソートされ、ブレイクアウト間近の銘柄を優先表示。
+- **`GET /api/sepa/diagnostics/[ticker]`**
+  - **用途**: 指定銘柄のSEPA詳細診断情報（Stage2の8条件、ファンダメンタル判定、VCP収縮度、日足チャート用データ）を取得します。
+  - **チャートデータ取得**: `daily_quotes` から直近260営業日（約1年分）の日足株価（終値、高値、安値、出来高、50/150/200日SMA）を `ORDER BY date DESC LIMIT 260) ORDER BY date ASC` のサブクエリにより時系列順で提供します。
 
 
 ## 7. コアロジックとアルゴリズム (Core Logic & Algorithms)
@@ -669,6 +703,53 @@ LLM（とくにローカルのgemma3:12b等）は指定フォーマットを逸�
 - **高値ブレイクアウト**: `当日の高値 >= 過去N日間(20日, 60日, 52週)の最高値`
 - **出来高/売買代金倍率**: `当日の出来高 / 過去25日間の平均出来高`
 - **決算リアクション (%)**: `(決算翌日の終値 - 決算前日の終値) / 決算前日の終値 * 100`
+
+### 7.5 マーク・ミネルヴィニ SEPA 計算エンジン (`src/lib/sepa/`)
+株式投資の世界的名著『ミネルヴィニの成長株投資法』に基づく、Stage 2 上昇トレンド、ファンダメンタル急加速、およびVCP（ボラティリティ収縮パターン）の物理計算エンジンです。
+
+#### 7.5.1 3ヶ月単独期（QoQ）ファンダメンタル算出 (`quarterly_parser.ts`, `quarterly_standalone.ts`)
+日本の有価証券報告書・決算短信の累計開示データから、正確な「3ヶ月単独四半期」の実績を物理減算により復元・比較します。
+- **3ヶ月単独値の復元式**:
+  - Q1単独: $Q1$
+  - Q2単独: $Q2_{累計} - Q1$
+  - Q3単独: $Q3_{累計} - Q2_{累計}$
+  - Q4単独: $通期実績 - Q3_{累計}$
+- **QoQ 成長率**: 前年同期の3ヶ月単独実績との前年同期比（YoY）を算出。
+- **EPS加速 (`eps_acceleration`)**: 最新QのEPS成長率 > 前QのEPS成長率 かつ 最新Q成長率 $\ge +20\%$
+- **売上加速 (`sales_acceleration`)**: 最新Qの売上成長率 > 前Qの売上成長率 かつ 最新Q成長率 $\ge +10\%$
+- **営業利益率拡大 (`margin_expansion`)**: 最新Qの営業利益率（OP / Sales） > 前年同期の営業利益率
+- **黒字転換 (`is_turnaround`)**: 前年同期が営業赤字（OP $\le 0$）から、今期黒字転換（OP $> 0$）
+- **Q4会計ノイズガード**: 売上YoYが+10%未満なのにEPSだけが急増（+300%以上）している場合は一過性の特殊要因（資産売却・税効果等）とみなし、EPS加速フラグを安全に除外。
+
+#### 7.5.2 トレンドテンプレート判定・掲載日算出 (`trend_calculator.ts`)
+ミネルヴィニのStage 2上昇トレンドを判定する8大条件：
+1. **株価 > 150日SMA かつ 株価 > 200日SMA**
+2. **150日SMA > 200日SMA**
+3. **200日SMAが上向き（最低1ヶ月/22営業日以上）**: 22日間のSMA200の線形回帰傾きがプラス（$\beta > 0$）
+4. **50日SMA > 150日SMA かつ 50日SMA > 200日SMA**
+5. **株価 > 50日SMA**
+6. **株価が52週安値から最低30%以上上昇（$\ge +30\%$）**
+7. **株価が52週高値から25%以内（$\le -25\%$）**
+8. **RSレーティング $\ge 70$（後述）**
+※IPO新興株バイパス: 200営業日未満のIPO銘柄については、SMA200関連条件をスキップし、データ存在する期間（SMA50等）でのみ判定。
+- **掲載日（Stage 2突入日：`stage2_entry_date`）の遡及算出**:
+  - 最新日でStage 2に合致した銘柄に対し、日足過去データを直近から過去へ順次遡り（Backwards Walk）、8条件を満たし続けた最も古い連続期間の開始日を突入日として特定・記録。リストから一時脱落した後に復帰した場合でも、最新の突入日が記録されます。
+
+#### 7.5.3 独自レラティブストレングス（RS）パーセンタイル算出 (`rs_calculator.ts`)
+日本市場全上場銘柄（約4,200銘柄）を母集団として、IBD方式の加重株価パフォーマンスを算出し、1〜99のパーセンタイル順位を付与。
+- **加重スコア式**: $Score = 2 \times P_{63} + P_{126} + P_{189} + P_{252}$ （直近四半期のパフォーマンスを2倍に加重）
+- **上場廃止銘柄の自動除外**: 市場全体の最新取引日（`latest_market_date`）から10カレンダー日以上更新のない銘柄は、RS計算母集団およびSEPA指標算出から自動除外。
+
+#### 7.5.4 VCP（ボラティリティ収縮）およびベース・ピボット算出 (`vcp_screener.ts`)
+1. **ベース期間高値（`base_high`）**: 直近65営業日から直近2営業日までの終値最高値。
+2. **ベース深さ（`base_depth_pct`）**: ベース期間最高値からの最大下落率。ベース深さが35%超（$-35\%$ 未満）の場合は深いベースとして除外。
+3. **真のピボット（`pivot_price`）**: 直近2〜15営業日前（ハンドル形成部）の終値最高値を真のピボットとする（当日・前日のノイズを避けるため2営業日前から）。
+4. **ピボット健全性ガード（`is_handle_healthy`）**: ハンドル部ピボットが高値から深く押しすぎていないかを検証（$pivot\_price \ge base\_high \times 0.85$）。15%以上乖離した安値圏の局所高値はピボットとして不適格。
+5. **ボラティリティ収縮率（`atr_contraction_ratio`）**: ハンドル部ATR(5) / ベース初期ATR(20) が $0.70$ 未満（30%以上の収縮）。
+6. **出来高ドライアップ率（`volume_dryup_ratio`）**: 直近5日平均出来高 / 50日平均出来高 が $0.60$ 未満（40%以上の枯渇）。
+7. **ブレイクアウト判定**:
+   - 接近中: 当日終値がピボット価格の $-3\%$ 以内
+   - ブレイクアウト: 当日終値がピボット価格の $+0\% \sim +5\%$ 以内
 
 
 ## 8. エラーハンドリングと運用設計 (Error Handling & Operations)

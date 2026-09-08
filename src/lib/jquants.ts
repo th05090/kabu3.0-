@@ -116,17 +116,13 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
           const shares = num(row.ShOutFY);
           
           return {
-            sql: `INSERT OR REPLACE INTO financials 
-                  (ticker, date, net_sales, operating_profit, profit, equity_to_asset_ratio, shares_outstanding, forecast_net_sales, forecast_operating_profit, forecast_profit, forecast_dividend, eps, adj_eps, adj_dividend, adj_shares_outstanding, ordinary_profit, total_assets, equity, operating_cash_flow, investing_cash_flow, financing_cash_flow, cash_and_equivalents) 
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            sql: `INSERT OR REPLACE INTO financials (ticker, date, net_sales, operating_profit, profit, equity_to_asset_ratio, shares_outstanding, forecast_net_sales, forecast_operating_profit, forecast_profit, forecast_dividend, eps, adj_eps, adj_dividend, adj_shares_outstanding, ordinary_profit, total_assets, equity, operating_cash_flow, investing_cash_flow, financing_cash_flow, cash_and_equivalents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             args: [
-              row.Code, row.DiscDate, 
-              num(row.Sales) || num(row.NCSales), num(row.OP) || num(row.NCOP), num(row.NP) || num(row.NCNP), 
+              row.Code, row.DiscDate, num(row.Sales) || num(row.NCSales), num(row.OP) || num(row.NCOP), num(row.NP) || num(row.NCNP), 
               num(row.EqAR) || num(row.NCEqAR), shares,
               num(row.NxFSales) || num(row.FSales) || num(row.NxFNCSales) || num(row.FNCSales), 
               num(row.NxFOP) || num(row.FOP) || num(row.NxFNCOP) || num(row.FNCOP), 
-              num(row.NxFNp) || num(row.FNP) || num(row.NxFNCNP) || num(row.FNCNP), div,
-              eps, eps, div, shares,
+              num(row.NxFNp) || num(row.FNP) || num(row.NxFNCNP) || num(row.FNCNP), div, eps, eps, div, shares,
               num(row.OdP) || num(row.NCOdP) || num(row.OrdinaryProfit) || num(row.NCOrdinaryProfit),
               num(row.TA) || num(row.NCTA) || num(row.TotalAssets) || num(row.NCTotalAssets),
               num(row.Eq) || num(row.NCEq) || num(row.Equity) || num(row.NCEquity),
@@ -191,26 +187,18 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
           }
         }
         
-        const transaction = batch.map(row => {
-          const open = parseFloat(row.O) || null;
-          const high = parseFloat(row.H) || null;
-          const low = parseFloat(row.L) || null;
-          const close = parseFloat(row.C) || null;
-          const volume = parseFloat(row.Vo) || 0;
-          const turnover = parseFloat(row.Va) || 0;
-          const adj_open = parseFloat(row.AdjustmentOpen) || open;
-          const adj_high = parseFloat(row.AdjustmentHigh) || high;
-          const adj_low = parseFloat(row.AdjustmentLow) || low;
-          const adj_close = parseFloat(row.AdjustmentClose) || close;
-          const adj_volume = parseFloat(row.AdjustmentVolume) || volume;
-          
-          return {
-            sql: `INSERT OR IGNORE INTO daily_quotes 
-                  (ticker, date, open, high, low, close, volume, turnover, adj_open, adj_high, adj_low, adj_close, adj_volume) 
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            args: [row.Code, row.Date, open, high, low, close, volume, turnover, adj_open, adj_high, adj_low, adj_close, adj_volume]
-          };
-        });
+        const transaction = batch.map(r => ({
+          sql: `INSERT OR IGNORE INTO daily_quotes (ticker, date, open, high, low, close, volume, turnover, adj_open, adj_high, adj_low, adj_close, adj_volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            r.Code, r.Date, parseFloat(r.O) || null, parseFloat(r.H) || null, parseFloat(r.L) || null, parseFloat(r.C) || null,
+            parseFloat(r.Vo) || 0, parseFloat(r.Va) || 0,
+            parseFloat(r.AdjustmentOpen) || parseFloat(r.O) || null,
+            parseFloat(r.AdjustmentHigh) || parseFloat(r.H) || null,
+            parseFloat(r.AdjustmentLow) || parseFloat(r.L) || null,
+            parseFloat(r.AdjustmentClose) || parseFloat(r.C) || null,
+            parseFloat(r.AdjustmentVolume) || parseFloat(r.Vo) || 0
+          ]
+        }));
 
         // 過去分をUPDATEするクエリもトランザクションに積む
         for (const s of splits) {
@@ -259,23 +247,16 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
       });
       await flushBatch(); // 残りをフラッシュ
       
-      // 同期成功したら履歴に追加
-      await db.execute({
-        sql: 'INSERT INTO sync_history (key, synced_at) VALUES (?, ?)',
-        args: [file.Key, new Date().toISOString()]
-      });
+      await db.execute({ sql: 'INSERT INTO sync_history (key, synced_at) VALUES (?, ?)', args: [file.Key, new Date().toISOString()] });
     }
 
-    console.log('[J-Quants] Calling earnings processor for new PDFs...');
     if (onProgress) onProgress('決算PDFからのAI解析(Docling + LLM)を開始します...');
     const { processEarningsReports } = await import('../features/earnings/index');
     await processEarningsReports(onProgress);
 
-    // --- Ollama アンロード処理 ---
-    console.log('[Ollama] Unloading models from VRAM before IR News Phase...');
+    // Ollama VRAM解放
     if (onProgress) onProgress('VRAMを解放中...');
-    const modelsToUnload = ["gemma4:12b", "bge-m3"];
-    for (const m of modelsToUnload) {
+    for (const m of ["gemma4:12b", "bge-m3"]) {
       try {
         await fetch("http://localhost:11434/api/generate", {
           method: "POST",
@@ -284,7 +265,6 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
         });
       } catch(e) {}
     }
-    // -----------------------------
 
     console.log('[J-Quants] Fetching IR News (Global Phase)...');
     if (onProgress) onProgress('過去5日分のIRニュースを検索・取得しています...');
@@ -300,9 +280,12 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
     if (onProgress) onProgress('テクニカル・ファンダメンタル指標を再計算中...');
     const { calculateAndPopulateStocks } = await import('./calculator');
     const calcResult = await calculateAndPopulateStocks();
-    if (!calcResult.success) {
-      throw calcResult.error;
-    }
+    if (!calcResult.success) throw calcResult.error;
+
+    console.log('[J-Quants] Calling SEPA metrics calculator...');
+    if (onProgress) onProgress('ミネルヴィニSEPA指標を再計算中...');
+    const { calculateAndPopulateSepa } = await import('./sepa/index');
+    await calculateAndPopulateSepa(onProgress);
 
     console.log('--- Sync Completed Successfully ---');
     if (onProgress) onProgress('同期が完了しました。');

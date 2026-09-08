@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BarChart2, Lightbulb, Bell, Briefcase } from 'lucide-react';
+import { LayoutDashboard, BarChart2, Lightbulb, Bell, Briefcase, TrendingUp } from 'lucide-react';
 import { SyncButton } from './SyncButton';
 
 export function Sidebar() {
@@ -24,6 +24,10 @@ export function Sidebar() {
         <Link href="/themes" className={`nav-item ${pathname.startsWith('/themes') ? 'active' : ''}`}>
           <Lightbulb size={20} />
           <span>テーマ</span>
+        </Link>
+        <Link href="/sepa" className={`nav-item ${pathname.startsWith('/sepa') ? 'active' : ''}`}>
+          <TrendingUp size={20} />
+          <span>SEPA</span>
         </Link>
         <Link href="#" className={`nav-item ${pathname.startsWith('/alerts') ? 'active' : ''}`}>
           <Bell size={20} />
