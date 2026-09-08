@@ -64,6 +64,7 @@ export async function calculateAndPopulateStocks() {
           date,
           ROW_NUMBER() OVER(PARTITION BY ticker ORDER BY date DESC) as rn
         FROM financials
+        WHERE (net_sales IS NOT NULL OR operating_profit IS NOT NULL OR profit IS NOT NULL)
       ),
       LatestFinancials AS (
         SELECT 
@@ -74,6 +75,7 @@ export async function calculateAndPopulateStocks() {
             WHERE f_fy.ticker = f1.ticker 
               AND f_fy.date <= f1.date 
               AND f_fy.date >= date(f1.date, '-15 months')
+              AND (f_fy.net_sales IS NOT NULL OR f_fy.profit IS NOT NULL)
             ORDER BY f_fy.net_sales DESC LIMIT 1
           ) as latest_fy_profit,
           (
@@ -83,6 +85,7 @@ export async function calculateAndPopulateStocks() {
               AND f_py.date < f1.date 
               AND f_py.date >= date(f1.date, '-14 months') 
               AND f_py.date <= date(f1.date, '-10 months')
+              AND (f_py.net_sales IS NOT NULL OR f_py.profit IS NOT NULL)
             ORDER BY f_py.date DESC LIMIT 1
           ) as prev_same_q_profit,
           (
@@ -91,6 +94,7 @@ export async function calculateAndPopulateStocks() {
             WHERE f2.ticker = f1.ticker 
               AND f2.date < f1.date 
               AND f2.date >= date(f1.date, '-15 months') 
+              AND (f2.net_sales IS NOT NULL OR f2.profit IS NOT NULL)
             ORDER BY net_sales DESC 
             LIMIT 1
           ) as prev_fy_date
@@ -143,7 +147,7 @@ export async function calculateAndPopulateStocks() {
         GROUP BY ticker
       )
       
-      INSERT INTO stocks (
+      INSERT OR REPLACE INTO stocks (
         ticker, name, market, industry, current_price,
         gics_sub_industry_id,
         sma_25, is_above_sma_25, sma_25_deviation_pct,
@@ -274,7 +278,11 @@ export async function calculateAndPopulateStocks() {
       FROM equities_master m
       LEFT JOIN Metrics met ON m.ticker = met.ticker
       LEFT JOIN LatestFinancials fin ON m.ticker = fin.ticker
-      LEFT JOIN financials prev_fin ON prev_fin.ticker = fin.ticker AND prev_fin.date = fin.prev_fy_date
+      LEFT JOIN (
+        SELECT ticker, date, net_sales, operating_profit, profit,
+               ROW_NUMBER() OVER(PARTITION BY ticker, date ORDER BY net_sales DESC) as rn
+        FROM financials
+      ) prev_fin ON prev_fin.ticker = fin.ticker AND prev_fin.date = fin.prev_fy_date AND prev_fin.rn = 1
       LEFT JOIN prev_sma_75 ps75 ON m.ticker = ps75.ticker AND ps75.date = (SELECT MAX(date) FROM daily_quotes WHERE ticker = m.ticker)
       LEFT JOIN prev_sma_200 ps200 ON m.ticker = ps200.ticker AND ps200.date = (SELECT MAX(date) FROM daily_quotes WHERE ticker = m.ticker)
       WHERE met.current_price IS NOT NULL;
@@ -289,4 +297,11 @@ export async function calculateAndPopulateStocks() {
     console.error('Calculation Failed:', error);
     return { success: false, error };
   }
+}
+
+if (process.argv[1] && process.argv[1].endsWith('calculator.ts')) {
+  calculateAndPopulateStocks().then(() => process.exit(0)).catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
 }

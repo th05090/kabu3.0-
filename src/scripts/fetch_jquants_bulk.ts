@@ -4,6 +4,7 @@ import * as zlib from 'zlib';
 import { parse } from 'csv-parse';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
+import { syncJQuants } from '../lib/jquants';
 
 // 環境変数の読み込み (.env.local)
 dotenv.config({ path: '.env.local' });
@@ -84,9 +85,6 @@ async function main() {
   console.log('--- J-Quants Bulk Data Sync Started ---');
 
   try {
-    // 1. Bulk List を取得 (例として /equities/master)
-    // ※V2のドキュメント等に沿ってエンドポイントを調整
-    // ここでは構造を確認するためのダミー実装に近い形にしています
     console.log('Fetching bulk list...');
     const listRes = await fetchJQuants('/v2/bulk/list?endpoint=equities/master');
     console.log('Bulk list response:', JSON.stringify(listRes, null, 2));

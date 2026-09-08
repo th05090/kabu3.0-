@@ -69,9 +69,12 @@ async function main() {
       investing_cash_flow REAL,
       financing_cash_flow REAL,
       cash_and_equivalents REAL,
-      PRIMARY KEY (ticker, date)
+      period_end_date TEXT,
+      fiscal_quarter TEXT,
+      PRIMARY KEY (ticker, period_end_date)
     );
   `);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_financials_period ON financials (ticker, period_end_date);`);
 
   // stocks (集計済み最新指標データ)
   await db.execute('DROP TABLE IF EXISTS stocks');

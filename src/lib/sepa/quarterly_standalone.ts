@@ -45,27 +45,28 @@ export function calculateSepaFundamentals(
     return defaultRes;
   }
 
-  // 1. 前年同期 (4四半期前) の単体を探索 (日付で約300日〜420日前)
-  const latestTime = new Date(latest.date).getTime();
+  // 1. 前年同期 (4四半期前) の単体を探索 (対象期末日ベースで約320日〜410日前)
+  const latestPeriodTime = new Date(latest.period_end_date || latest.date).getTime();
   let prevYearQuarter: StandaloneQuarterData | null = null;
   let prevQuarter: StandaloneQuarterData | null = standaloneList.length > 1 ? standaloneList[1] : null;
 
   for (let i = 1; i < standaloneList.length; i++) {
     const q = standaloneList[i];
-    const diffDays = Math.round((latestTime - new Date(q.date).getTime()) / (1000 * 60 * 60 * 24));
+    const qPeriodTime = new Date(q.period_end_date || q.date).getTime();
+    const diffDays = Math.round((latestPeriodTime - qPeriodTime) / (1000 * 60 * 60 * 24));
     if (diffDays >= 300 && diffDays <= 420) {
       prevYearQuarter = q;
       break;
     }
   }
 
-  // 4四半期前がなければインデックス4を採用
+  // 4四半期前がなければインデックス4を採用（四半期がデデュプ済みのため）
   if (!prevYearQuarter && standaloneList.length >= 5) {
     prevYearQuarter = standaloneList[4];
   }
 
   // 前年同期が存在する場合のYoY計算
-  if (prevYearQuarter && !prevYearQuarter.is_irregular_period) {
+  if (prevYearQuarter && (prevYearQuarter.standalone_sales > 0 || !prevYearQuarter.is_irregular_period)) {
     const curSales = latest.standalone_sales;
     const prevSales = prevYearQuarter.standalone_sales;
     const curOp = latest.standalone_op;
@@ -90,32 +91,49 @@ export function calculateSepaFundamentals(
       defaultRes.ordinary_profit_yoy_pct = ((curOrd - prevOrd) / prevOrd) * 100;
     }
 
-    // EPSステータス ＆ 成長率判定 (符号逆転バグ防止)
-    if (prevEps <= 0) {
-      if (curEps > 0) {
-        defaultRes.growth_status = 'TURNAROUND'; // 黒字転換
-      } else if (curEps > prevEps) {
+    // EPS YoY成長率 (前年プラスの場合のみ安全に計算)
+    let epsGrowth: number | null = null;
+    if (prevEps > 0) {
+      epsGrowth = ((curEps - prevEps) / prevEps) * 100;
+      defaultRes.eps_yoy_pct = epsGrowth;
+    } else {
+      defaultRes.eps_yoy_pct = null; // 前年赤字は符号逆転バグ防止のためnull
+    }
+
+    // =========================================================================
+    // ステータス判定 (営業利益 Operating Profit を主軸とした投資的判定)
+    // =========================================================================
+    if (prevOp <= 0 && curOp > 0) {
+      // 1. 本業が赤字から黒字へ劇的復活
+      defaultRes.growth_status = 'TURNAROUND';
+    } else if (prevOp > 0 && curOp <= 0) {
+      // 2. 本業が黒字から赤字へ転落 (真の赤字転落)
+      defaultRes.growth_status = 'DEFICIT_FALL';
+    } else if (prevOp <= 0 && curOp <= 0) {
+      // 3. 本業が赤字継続
+      if (curOp > prevOp) {
         defaultRes.growth_status = 'LOSS_REDUCTION'; // 赤字縮小
       } else {
         defaultRes.growth_status = 'LOSS_EXPANSION'; // 赤字拡大
       }
-      defaultRes.eps_yoy_pct = null; // 前年赤字は%未算出
     } else {
-      if (curEps < 0) {
-        defaultRes.growth_status = 'DEFICIT_FALL'; // 赤字転落
-        defaultRes.eps_yoy_pct = ((curEps - prevEps) / prevEps) * 100;
+      // 4. 本業は黒字継続 (prevOp > 0 && curOp > 0)
+      if (curEps <= 0) {
+        // 本業は黒字だが特損等で最終赤字 -> DEFICIT_FALLにはせず、黒字枠として特損リスクを注記
+        defaultRes.growth_status = 'GROWTH';
+        defaultRes.has_accounting_noise_risk = true;
+      } else if (prevEps <= 0 && curEps > 0) {
+        // 営業黒字継続下で、純利益が赤字から黒字転換
+        defaultRes.growth_status = 'TURNAROUND';
       } else {
-        const epsGrowth = ((curEps - prevEps) / prevEps) * 100;
-        defaultRes.eps_yoy_pct = epsGrowth;
-
-        // Q4会計調整ノイズチェック
+        // 営業・純利益ともに黒字
         const salesGrowth = defaultRes.sales_yoy_pct ?? 0;
-        if (epsGrowth >= 300) {
+        if (epsGrowth != null && epsGrowth >= 300) {
           if (salesGrowth >= 10) {
             defaultRes.growth_status = 'EXPLOSIVE_GROWTH';
           } else {
             defaultRes.growth_status = 'GROWTH';
-            defaultRes.has_accounting_noise_risk = true; // ⚠️ 売上が伴わない利益急増
+            defaultRes.has_accounting_noise_risk = true; // 売上を伴わない利益急増
           }
         } else {
           defaultRes.growth_status = 'GROWTH';

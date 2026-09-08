@@ -115,8 +115,42 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
           const div = num(row.DivAnn) || num(row.FDivAnn) || num(row.FDivFY) || num(row.NxFDivAnn) || num(row.NxFDivFY);
           const shares = num(row.ShOutFY);
           
+          const curPeriodType = row.CurPerType || row.TypeCurPeriod || (row.DocType?.includes('1Q') ? '1Q' : row.DocType?.includes('2Q') ? '2Q' : row.DocType?.includes('3Q') ? '3Q' : row.DocType?.includes('FY') ? 'FY' : null);
+          const periodEndDate = row.CurPerEn || row.DiscDate;
+          
           return {
-            sql: `INSERT OR REPLACE INTO financials (ticker, date, net_sales, operating_profit, profit, equity_to_asset_ratio, shares_outstanding, forecast_net_sales, forecast_operating_profit, forecast_profit, forecast_dividend, eps, adj_eps, adj_dividend, adj_shares_outstanding, ordinary_profit, total_assets, equity, operating_cash_flow, investing_cash_flow, financing_cash_flow, cash_and_equivalents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            sql: `INSERT INTO financials (
+              ticker, date, net_sales, operating_profit, profit, 
+              equity_to_asset_ratio, shares_outstanding, 
+              forecast_net_sales, forecast_operating_profit, forecast_profit, forecast_dividend, 
+              eps, adj_eps, adj_dividend, adj_shares_outstanding, 
+              ordinary_profit, total_assets, equity, 
+              operating_cash_flow, investing_cash_flow, financing_cash_flow, cash_and_equivalents,
+              period_end_date, fiscal_quarter
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (ticker, period_end_date) DO UPDATE SET
+              date = CASE WHEN excluded.net_sales IS NOT NULL THEN excluded.date ELSE financials.date END,
+              fiscal_quarter = COALESCE(excluded.fiscal_quarter, financials.fiscal_quarter),
+              net_sales = COALESCE(excluded.net_sales, financials.net_sales),
+              operating_profit = COALESCE(excluded.operating_profit, financials.operating_profit),
+              profit = COALESCE(excluded.profit, financials.profit),
+              equity_to_asset_ratio = COALESCE(excluded.equity_to_asset_ratio, financials.equity_to_asset_ratio),
+              shares_outstanding = COALESCE(excluded.shares_outstanding, financials.shares_outstanding),
+              forecast_net_sales = COALESCE(excluded.forecast_net_sales, financials.forecast_net_sales),
+              forecast_operating_profit = COALESCE(excluded.forecast_operating_profit, financials.forecast_operating_profit),
+              forecast_profit = COALESCE(excluded.forecast_profit, financials.forecast_profit),
+              forecast_dividend = COALESCE(excluded.forecast_dividend, financials.forecast_dividend),
+              eps = COALESCE(excluded.eps, financials.eps),
+              adj_eps = COALESCE(excluded.adj_eps, financials.adj_eps),
+              adj_dividend = COALESCE(excluded.adj_dividend, financials.adj_dividend),
+              adj_shares_outstanding = COALESCE(excluded.adj_shares_outstanding, financials.adj_shares_outstanding),
+              ordinary_profit = COALESCE(excluded.ordinary_profit, financials.ordinary_profit),
+              total_assets = COALESCE(excluded.total_assets, financials.total_assets),
+              equity = COALESCE(excluded.equity, financials.equity),
+              operating_cash_flow = COALESCE(excluded.operating_cash_flow, financials.operating_cash_flow),
+              investing_cash_flow = COALESCE(excluded.investing_cash_flow, financials.investing_cash_flow),
+              financing_cash_flow = COALESCE(excluded.financing_cash_flow, financials.financing_cash_flow),
+              cash_and_equivalents = COALESCE(excluded.cash_and_equivalents, financials.cash_and_equivalents)`,
             args: [
               row.Code, row.DiscDate, num(row.Sales) || num(row.NCSales), num(row.OP) || num(row.NCOP), num(row.NP) || num(row.NCNP), 
               num(row.EqAR) || num(row.NCEqAR), shares,
@@ -129,7 +163,9 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
               num(row.CFO) || num(row.NCOperatingCF) || num(row.OperatingCF),
               num(row.CFI) || num(row.NCInvestingCF) || num(row.InvestingCF),
               num(row.CFF) || num(row.NCFinancingCF) || num(row.FinancingCF),
-              num(row.CashEq) || num(row.NCCashEquivalents) || num(row.CashEquivalents)
+              num(row.CashEq) || num(row.NCCashEquivalents) || num(row.CashEquivalents),
+              periodEndDate,
+              curPeriodType
             ]
           };
         });

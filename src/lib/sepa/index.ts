@@ -204,7 +204,7 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
   if (onProgress) onProgress('四半期単体ファンダメンタルズを解析中...');
   console.log('[SEPA] Loading financials...');
   const finRes = await db.execute(`
-    SELECT ticker, date, net_sales, operating_profit, ordinary_profit, profit, eps, adj_eps, adj_shares_outstanding
+    SELECT ticker, date, net_sales, operating_profit, ordinary_profit, profit, eps, adj_eps, adj_shares_outstanding, period_end_date, fiscal_quarter
     FROM financials
     ORDER BY ticker, date DESC
   `);
@@ -222,6 +222,8 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
       eps: r.eps != null ? Number(r.eps) : null,
       adj_eps: r.adj_eps != null ? Number(r.adj_eps) : null,
       adj_shares_outstanding: r.adj_shares_outstanding != null ? Number(r.adj_shares_outstanding) : null,
+      period_end_date: r.period_end_date as string | null,
+      fiscal_quarter: r.fiscal_quarter as string | null,
     });
   });
 
