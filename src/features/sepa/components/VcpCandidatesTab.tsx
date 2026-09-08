@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { useSepaVcp, useSepaDiagnostics } from '../hooks/useSepa';
 import { SepaPriceChart } from './SepaPriceChart';
-import { Target, Zap, Activity, VolumeX, ExternalLink, CheckCircle2 } from 'lucide-react';
+import { SepaSortHeader } from './SepaSortHeader';
+import { Target, Zap, Activity, VolumeX, ExternalLink, CheckCircle2, Building2 } from 'lucide-react';
 import { SepaStockRecord } from '../types/sepa';
 
 interface VcpCandidatesTabProps {
@@ -12,11 +13,36 @@ interface VcpCandidatesTabProps {
 
 export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
   const [mode, setMode] = useState<string>('near_pivot');
+  const [excludeEtf, setExcludeEtf] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
 
-  const { candidates, total, isLoading } = useSepaVcp(mode, page, 50);
+  const { candidates, total, isLoading } = useSepaVcp(mode, page, 50, sortBy, order, excludeEtf);
   const { diagnostics, isLoading: diagLoading } = useSepaDiagnostics(selectedTicker);
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      if (order === 'desc') {
+        setOrder('asc');
+      } else {
+        setSortBy(null);
+        setOrder('desc');
+      }
+    } else {
+      setSortBy(field);
+      setOrder('desc');
+    }
+    setPage(1);
+  };
+
+  const handleModeChange = (newMode: string) => {
+    setMode(newMode);
+    setPage(1);
+    setSortBy(null);
+    setOrder('desc');
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -24,39 +50,50 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
       <div className="sepa-filter-box" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="sepa-btn-group">
           <button
-            onClick={() => { setMode('near_pivot'); setPage(1); }}
+            onClick={() => handleModeChange('near_pivot')}
             className={`sepa-chip ${mode === 'near_pivot' ? 'active-amber' : ''}`}
           >
             <Target size={14} />
             ピボット接近 (-5%〜0%)
           </button>
           <button
-            onClick={() => { setMode('breakout'); setPage(1); }}
+            onClick={() => handleModeChange('breakout')}
             className={`sepa-chip ${mode === 'breakout' ? 'active-green' : ''}`}
           >
             <Zap size={14} />
             ブレイク直後 (出来高急増)
           </button>
           <button
-            onClick={() => { setMode('vdu_dryup'); setPage(1); }}
+            onClick={() => handleModeChange('vdu_dryup')}
             className={`sepa-chip ${mode === 'vdu_dryup' ? 'active-indigo' : ''}`}
           >
             <VolumeX size={14} />
             出来高枯渇 (VDU &lt; 60%)
           </button>
           <button
-            onClick={() => { setMode('strict_funda'); setPage(1); }}
+            onClick={() => handleModeChange('strict_funda')}
             className={`sepa-chip ${mode === 'strict_funda' ? 'active-purple' : ''}`}
           >
             <CheckCircle2 size={14} />
             Stage2 + 全ファンダ
           </button>
           <button
-            onClick={() => { setMode('all'); setPage(1); }}
+            onClick={() => handleModeChange('all')}
             className={`sepa-chip ${mode === 'all' ? 'active-neutral' : ''}`}
           >
             <Activity size={14} />
             全VCP候補
+          </button>
+
+          <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.1)', margin: '0 0.25rem' }} />
+
+          <button
+            onClick={() => { setExcludeEtf(!excludeEtf); setPage(1); }}
+            className={`sepa-chip ${excludeEtf ? 'active-purple' : ''}`}
+            title="ETF、ETN、REIT、投資法人、投信等を除外して事業会社（株式）のみを表示"
+          >
+            <Building2 size={13} />
+            株式のみ (投信除外)
           </button>
         </div>
 
@@ -73,12 +110,24 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
           <table className="sepa-table">
             <thead>
               <tr>
-                <th>銘柄</th>
-                <th style={{ textAlign: 'right' }}>株価</th>
-                <th style={{ textAlign: 'right' }}>ピボット</th>
-                <th style={{ textAlign: 'right' }}>接近度</th>
-                <th style={{ textAlign: 'center' }}>ATR収縮</th>
-                <th style={{ textAlign: 'center' }}>出来高枯渇</th>
+                <SepaSortHeader field="ticker" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="left">
+                  銘柄
+                </SepaSortHeader>
+                <SepaSortHeader field="current_price" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                  株価
+                </SepaSortHeader>
+                <SepaSortHeader field="pivot_price" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                  ピボット
+                </SepaSortHeader>
+                <SepaSortHeader field="pivot_distance_pct" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                  接近度
+                </SepaSortHeader>
+                <SepaSortHeader field="atr_contraction_ratio" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
+                  ATR収縮
+                </SepaSortHeader>
+                <SepaSortHeader field="volume_dryup_ratio" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
+                  出来高枯渇
+                </SepaSortHeader>
               </tr>
             </thead>
             <tbody>

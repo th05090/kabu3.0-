@@ -9,12 +9,17 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const mode = searchParams.get('mode') || 'near_pivot'; // 'near_pivot', 'breakout', 'vdu_dryup', 'all', 'strict_funda'
+    const excludeEtf = searchParams.get('exclude_etf') !== 'false'; // デフォルトで投信・ETF等を除外 (true)
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const limit = Math.min(100, Math.max(10, parseInt(searchParams.get('limit') || '50')));
     const offset = (page - 1) * limit;
 
     const conditions: string[] = ['is_trend_template_pass = 1']; // Stage 2トレンド合格を大前提
     const args: any[] = [];
+
+    if (excludeEtf) {
+      conditions.push('is_operating_company = 1');
+    }
 
     if (mode === 'near_pivot') {
       conditions.push('is_near_pivot = 1');
@@ -36,10 +41,29 @@ export async function GET(req: Request) {
     });
     const total = Number(countRes.rows[0]?.total || 0);
 
+    const validSortColumns: Record<string, string> = {
+      ticker: 'ticker',
+      current_price: 'current_price',
+      pivot_price: 'pivot_price',
+      pivot_distance_pct: 'pivot_distance_pct',
+      atr_contraction_ratio: 'atr_contraction_ratio',
+      volume_dryup_ratio: 'volume_dryup_ratio',
+      rs_rating: 'rs_rating',
+    };
+
+    const sortBy = searchParams.get('sort_by');
+    const order = searchParams.get('order')?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+    let orderSql = 'ORDER BY is_pivot_breakout DESC, is_near_pivot DESC, pivot_distance_pct DESC, rs_rating DESC';
+    if (sortBy && validSortColumns[sortBy]) {
+      const col = validSortColumns[sortBy];
+      orderSql = `ORDER BY ${col} IS NULL ASC, ${col} ${order}`;
+    }
+
     const dataRes = await db.execute({
       sql: `SELECT * FROM sepa_metrics 
             WHERE ${whereClause} 
-            ORDER BY is_pivot_breakout DESC, pivot_distance_pct DESC, rs_rating DESC
+            ${orderSql}
             LIMIT ? OFFSET ?`,
       args: [...args, limit, offset]
     });

@@ -995,6 +995,28 @@ a { color: inherit; text-decoration: none; }
   z-index: 10;
 }
 
+.sepa-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.sepa-table th.sortable:hover {
+  color: #fff;
+  background: rgba(30, 41, 59, 0.95);
+}
+
+.sepa-table th.sortable.active {
+  color: #818cf8;
+}
+
+.sepa-sort-icon {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 0.3rem;
+}
+
 .sepa-table td {
   padding: 0.7rem 0.85rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);

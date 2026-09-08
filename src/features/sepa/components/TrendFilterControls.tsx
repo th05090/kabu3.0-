@@ -1,9 +1,11 @@
 import React from 'react';
-import { Search, Filter, Sparkles, TrendingUp, Flame } from 'lucide-react';
+import { Search, Filter, Sparkles, TrendingUp, Flame, Building2 } from 'lucide-react';
 
 interface TrendFilterControlsProps {
   filter: string;
   setFilter: (f: string) => void;
+  excludeEtf: boolean;
+  setExcludeEtf: (b: boolean) => void;
   minRs: number | null;
   setMinRs: (rs: number | null) => void;
   accelerating: boolean;
@@ -22,6 +24,8 @@ interface TrendFilterControlsProps {
 export function TrendFilterControls({
   filter,
   setFilter,
+  excludeEtf,
+  setExcludeEtf,
   minRs,
   setMinRs,
   accelerating,
@@ -87,6 +91,16 @@ export function TrendFilterControls({
         <span className="sepa-filter-label">
           <Filter size={12} /> ファンダ絞り込み:
         </span>
+
+        {/* 株式のみ (投信除外) */}
+        <button
+          onClick={() => setExcludeEtf(!excludeEtf)}
+          className={`sepa-chip ${excludeEtf ? 'active-purple' : ''}`}
+          title="ETF、ETN、REIT、投資法人、投信等を除外して事業会社（株式）のみを表示"
+        >
+          <Building2 size={13} />
+          株式のみ (投信除外)
+        </button>
 
         {/* RSフィルター */}
         <button

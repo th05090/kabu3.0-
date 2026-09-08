@@ -400,6 +400,7 @@ CREATE TABLE IF NOT EXISTS sepa_metrics (
   name TEXT,
   market TEXT,
   industry TEXT,
+  is_operating_company INTEGER DEFAULT 1,
   latest_date TEXT,
   current_price REAL,
   sma_50 REAL,
@@ -666,12 +667,15 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
   - **用途**: `sepa_metrics` テーブルからStage 2トレンドテンプレート銘柄一覧を取得します。
   - **クエリパラメータ**:
     - `filter`: `'all_pass'` (`is_trend_template_pass = 1`, デフォルト), `'all'`, `'ipo_only'` (`is_ipo = 1`), `'turnaround'` (`growth_status = 'TURNAROUND'`)
+    - `exclude_etf`: 投信・ETF・ETN・REIT等の非事業会社を除外 (`'true'` または未指定の場合 `is_operating_company = 1`、`'false'` で全銘柄)
     - `min_rs`: RSレーティング下限（例: `70`）
     - `accelerating`: `'true'` の場合 `is_growth_accelerating = 1`
     - `margin_expansion`: `'true'` の場合 `is_margin_expanding = 1`
     - `sweet_spot_cap`: `'true'` の場合 時価総額100〜1,000億円 (`market_cap >= 100 AND market_cap <= 1000`)
     - `min_liquidity`: `'true'` の場合 5日平均売買代金1億円以上 (`avg_trading_value_5d >= 1.0`)
     - `search`: ティッカーまたは銘柄名の部分一致検索
+    - `sort_by`: ソート対象カラム名 (`ticker`, `current_price`, `rs_rating`, `passed_conditions_count`, `stage2_entry_date`, `sales_yoy_pct`, `eps_yoy_pct`, `market_cap`)
+    - `order`: 昇順/降順 (`'asc'` または `'desc'`, デフォルト `'desc'`)
     - `page`: ページ番号 (デフォルト `1`)
     - `limit`: 1ページあたりの件数 (デフォルト `50`, 最大 `100`)
   - **レスポンス形式**:
@@ -695,9 +699,12 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
       - `'vdu_dryup'`: 出来高枯渇 (`is_volume_dryup = 1`)
       - `'strict_funda'`: Stage 2 + 全ファンダ適合 (`rs_rating >= 80` かつ 成長加速・利益率改善・時価総額100〜1,000億・売買代金1億以上)
       - `'all'`: 全VCP候補 `(is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)`
+    - `exclude_etf`: 投信・ETF・ETN・REIT等の非事業会社を除外 (`'true'` または未指定の場合 `is_operating_company = 1`、`'false'` で全銘柄)
+    - `sort_by`: ソート対象カラム名 (`ticker`, `current_price`, `pivot_price`, `pivot_distance_pct`, `atr_contraction_ratio`, `volume_dryup_ratio`, `rs_rating`)
+    - `order`: 昇順/降順 (`'asc'` または `'desc'`, デフォルト `'desc'`)
     - `page`: ページ番号 (デフォルト `1`)
     - `limit`: 1ページあたりの件数 (デフォルト `50`, 最大 `100`)
-  - **ソート順**: `ORDER BY is_pivot_breakout DESC, pivot_distance_pct DESC, rs_rating DESC`
+  - **ソート順**: 未指定時は `ORDER BY is_pivot_breakout DESC, is_near_pivot DESC, pivot_distance_pct DESC, rs_rating DESC`
   - **レスポンス形式**:
     ```json
     {

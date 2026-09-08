@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useSepaTrend } from '../hooks/useSepa';
 import { TrendFilterControls } from './TrendFilterControls';
 import { ChecklistBadges } from './ChecklistBadges';
+import { SepaSortHeader } from './SepaSortHeader';
 import { ChevronLeft, ChevronRight, AlertTriangle, Sparkles, ExternalLink } from 'lucide-react';
 import { SepaStockRecord } from '../types/sepa';
 
@@ -14,33 +15,57 @@ interface TrendTemplateTabProps {
 export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
   const [page, setPage] = useState<number>(1);
   const [filter, setFilter] = useState<string>('all_pass');
+  const [excludeEtf, setExcludeEtf] = useState<boolean>(true);
   const [minRs, setMinRs] = useState<number | null>(80);
   const [accelerating, setAccelerating] = useState<boolean>(true);
   const [marginExpansion, setMarginExpansion] = useState<boolean>(true);
   const [sweetSpotCap, setSweetSpotCap] = useState<boolean>(true);
   const [minLiquidity, setMinLiquidity] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
 
   const { stocks, total, totalPages, isLoading } = useSepaTrend({
     page,
     limit: 50,
     filter,
+    exclude_etf: excludeEtf,
     min_rs: minRs,
     accelerating,
     margin_expansion: marginExpansion,
     sweet_spot_cap: sweetSpotCap,
     min_liquidity: minLiquidity,
     search: search.length >= 2 ? search : undefined,
+    sort_by: sortBy,
+    order: order,
   });
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      if (order === 'desc') {
+        setOrder('asc');
+      } else {
+        setSortBy(null);
+        setOrder('desc');
+      }
+    } else {
+      setSortBy(field);
+      setOrder('desc');
+    }
+    setPage(1);
+  };
 
   const handleReset = () => {
     setFilter('all_pass');
+    setExcludeEtf(true);
     setMinRs(80);
     setAccelerating(true);
     setMarginExpansion(true);
     setSweetSpotCap(true);
     setMinLiquidity(true);
     setSearch('');
+    setSortBy(null);
+    setOrder('desc');
     setPage(1);
   };
 
@@ -49,6 +74,8 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
       <TrendFilterControls
         filter={filter}
         setFilter={(f) => { setFilter(f); setPage(1); }}
+        excludeEtf={excludeEtf}
+        setExcludeEtf={(b) => { setExcludeEtf(b); setPage(1); }}
         minRs={minRs}
         setMinRs={(rs) => { setMinRs(rs); setPage(1); }}
         accelerating={accelerating}
@@ -94,14 +121,30 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
         <table className="sepa-table">
           <thead>
             <tr>
-              <th>銘柄コード・企業名</th>
-              <th style={{ textAlign: 'right' }}>現在株価</th>
-              <th style={{ textAlign: 'center' }}>RS順位</th>
-              <th>トレンド条件 (8条件)</th>
-              <th style={{ textAlign: 'center' }}>掲載日 (Stage2突入)</th>
-              <th style={{ textAlign: 'right' }}>四半期売上YoY</th>
-              <th style={{ textAlign: 'right' }}>四半期EPS YoY</th>
-              <th style={{ textAlign: 'right' }}>時価総額</th>
+              <SepaSortHeader field="ticker" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="left">
+                銘柄コード・企業名
+              </SepaSortHeader>
+              <SepaSortHeader field="current_price" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                現在株価
+              </SepaSortHeader>
+              <SepaSortHeader field="rs_rating" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
+                RS順位
+              </SepaSortHeader>
+              <SepaSortHeader field="passed_conditions_count" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="left">
+                トレンド条件 (8条件)
+              </SepaSortHeader>
+              <SepaSortHeader field="stage2_entry_date" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
+                掲載日 (Stage2突入)
+              </SepaSortHeader>
+              <SepaSortHeader field="sales_yoy_pct" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                四半期売上YoY
+              </SepaSortHeader>
+              <SepaSortHeader field="eps_yoy_pct" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                四半期EPS YoY
+              </SepaSortHeader>
+              <SepaSortHeader field="market_cap" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                時価総額
+              </SepaSortHeader>
               <th style={{ textAlign: 'center' }}>診断</th>
             </tr>
           </thead>

@@ -10,17 +10,47 @@ const db = createClient({
   url: process.env.DATABASE_URL || 'file:local.db',
 });
 
+const NON_OPERATING_PATTERNS = [
+  '上場信託',
+  'ETF',
+  'ETN',
+  'ＥＴＮ',
+  '投資法人',
+  'リート',
+  '上場投信',
+  'ファンド',
+  'ＥＴＦ',
+  'ブル',
+  'ベア',
+];
+
+/**
+ * 銘柄が事業会社（個別株）か、投信・ETF・REIT等（非事業会社）かを判定
+ */
+export function isOperatingCompany(name: string | null | undefined, industry: string | null | undefined): boolean {
+  if (!name) return true;
+  if (industry === 'ETF等' || industry === 'REIT等' || industry === 'その他') {
+    return false;
+  }
+  for (const pattern of NON_OPERATING_PATTERNS) {
+    if (name.includes(pattern)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * sepa_metrics テーブルを初期化
  */
-async function ensureSepaTable() {
-  await db.execute(`DROP TABLE IF EXISTS sepa_metrics`);
+export async function ensureSepaTable() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS sepa_metrics (
       ticker TEXT PRIMARY KEY,
       name TEXT,
       market TEXT,
       industry TEXT,
+      is_operating_company INTEGER DEFAULT 1,
       latest_date TEXT,
       current_price REAL,
       sma_50 REAL,
@@ -81,6 +111,21 @@ async function ensureSepaTable() {
       latest_ir_date TEXT
     )
   `);
+
+  // 既存テーブルへのマイグレーション安全策（カラム存在チェックとALTER TABLE）
+  try {
+    const tableInfo = await db.execute(`PRAGMA table_info(sepa_metrics)`);
+    if (tableInfo.rows && tableInfo.rows.length > 0) {
+      const hasCol = tableInfo.rows.some(r => r.name === 'is_operating_company');
+      if (!hasCol) {
+        await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN is_operating_company INTEGER DEFAULT 1`);
+      }
+    }
+  } catch (e) {
+    console.warn('[SEPA] Migration check warning:', e);
+  }
+
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_sepa_operating ON sepa_metrics (is_operating_company)`);
 }
 
 /**
@@ -89,6 +134,7 @@ async function ensureSepaTable() {
 export async function calculateAndPopulateSepa(onProgress?: (msg: string) => void) {
   console.log('--- Starting Minervini SEPA Metrics Calculation ---');
   if (onProgress) onProgress('SEPA指標の初期化中...');
+  await db.execute(`DROP TABLE IF EXISTS sepa_metrics`);
   await ensureSepaTable();
   await db.execute('DELETE FROM sepa_metrics');
 
@@ -226,6 +272,8 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
       trend.passed_conditions_count = Math.min(8, trend.passed_conditions_count + 1);
     }
 
+    const isOp = isOperatingCompany(s.name, s.industry);
+
     batch.push({
       sql: `INSERT INTO sepa_metrics VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
@@ -234,10 +282,10 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?
+        ?, ?, ?
       )`,
       args: [
-        ticker, s.name, s.market, s.industry, quotes[0].date,
+        ticker, s.name, s.market, s.industry, isOp ? 1 : 0, quotes[0].date,
         trend.current_price, trend.sma_50, trend.sma_150, trend.sma_200,
         trend.is_above_sma_50 ? 1 : 0, trend.is_above_sma_150 ? 1 : 0, trend.is_above_sma_200 ? 1 : 0,
         trend.is_sma_50_above_150_200 ? 1 : 0, trend.is_sma_150_above_200 ? 1 : 0,

@@ -89,6 +89,7 @@ export interface SepaStockRecord extends SepaTrendMetrics, SepaRsMetrics, SepaFu
   name: string;
   market: string;
   industry: string;
+  is_operating_company: boolean; // 1: 事業会社 (株式), 0: 投信・ETF・REIT等
   latest_date: string;
   ir_catalyst_count?: number; // 新規事業IRニュース数
   latest_ir_title?: string;
