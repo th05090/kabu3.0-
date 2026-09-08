@@ -109,6 +109,7 @@ graph TD
   - RS（レラティブストレングス）ランキング順、または「掲載日（Stage2突入日）」によるソートが可能。リスト復帰時にも最新の突入日を表示。
 - **VCP・セットアップ候補タブ (`VcpCandidatesTab`)**:
   - トレンドテンプレート合格銘柄の中から、ベース形成（20〜65日）およびピボット形成（直近2〜15日）を経たブレイクアウト直前・直後の銘柄を抽出。
+  - 上部に5つのプリセット絞り込み（「ピボット接近」「ブレイク直後」「出来高枯渇」「Stage2 + 全ファンダ」「全VCP候補」）を搭載。
   - 左ペイン（候補銘柄一覧）と右ペイン（クイック詳細プレビュー）の2ペイン構成。
   - チャート上にはベース期間高値（ベースレジスタンス：橙色点線）と真のピボット（ピボットライン：金色破線）を分離表示。
 - **個別銘柄SEPA診断タブ (`DiagnosticsTab`)**:
@@ -690,9 +691,10 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
   - **クエリパラメータ**:
     - `mode`: 
       - `'near_pivot'`: ピボット接近中 (`is_near_pivot = 1`, デフォルト)
-      - `'breakout'`: ブレイクアウト (`is_pivot_breakout = 1`)
+      - `'breakout'`: ブレイク直後 (`is_pivot_breakout = 1`)
       - `'vdu_dryup'`: 出来高枯渇 (`is_volume_dryup = 1`)
-      - `'all'`: `(is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)`
+      - `'strict_funda'`: Stage 2 + 全ファンダ適合 (`rs_rating >= 80` かつ 成長加速・利益率改善・時価総額100〜1,000億・売買代金1億以上)
+      - `'all'`: 全VCP候補 `(is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)`
     - `page`: ページ番号 (デフォルト `1`)
     - `limit`: 1ページあたりの件数 (デフォルト `50`, 最大 `100`)
   - **ソート順**: `ORDER BY is_pivot_breakout DESC, pivot_distance_pct DESC, rs_rating DESC`

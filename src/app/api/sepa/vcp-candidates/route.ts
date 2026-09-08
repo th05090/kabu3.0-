@@ -8,7 +8,7 @@ const db = createClient({
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const mode = searchParams.get('mode') || 'near_pivot'; // 'near_pivot', 'breakout', 'vdu_dryup', 'all'
+    const mode = searchParams.get('mode') || 'near_pivot'; // 'near_pivot', 'breakout', 'vdu_dryup', 'all', 'strict_funda'
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const limit = Math.min(100, Math.max(10, parseInt(searchParams.get('limit') || '50')));
     const offset = (page - 1) * limit;
@@ -24,6 +24,8 @@ export async function GET(req: Request) {
       conditions.push('is_volume_dryup = 1');
     } else if (mode === 'all') {
       conditions.push('(is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)');
+    } else if (mode === 'strict_funda') {
+      conditions.push('rs_rating >= 80 AND is_growth_accelerating = 1 AND is_margin_expanding = 1 AND market_cap >= 100 AND market_cap <= 1000 AND avg_trading_value_5d >= 1.0');
     }
 
     const whereClause = conditions.join(' AND ');

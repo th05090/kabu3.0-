@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useSepaVcp, useSepaDiagnostics } from '../hooks/useSepa';
 import { SepaPriceChart } from './SepaPriceChart';
-import { Target, Zap, Activity, VolumeX, ExternalLink } from 'lucide-react';
+import { Target, Zap, Activity, VolumeX, ExternalLink, CheckCircle2 } from 'lucide-react';
 import { SepaStockRecord } from '../types/sepa';
 
 interface VcpCandidatesTabProps {
@@ -43,6 +43,13 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
           >
             <VolumeX size={14} />
             出来高枯渇 (VDU &lt; 60%)
+          </button>
+          <button
+            onClick={() => { setMode('strict_funda'); setPage(1); }}
+            className={`sepa-chip ${mode === 'strict_funda' ? 'active-purple' : ''}`}
+          >
+            <CheckCircle2 size={14} />
+            Stage2 + 全ファンダ
           </button>
           <button
             onClick={() => { setMode('all'); setPage(1); }}
