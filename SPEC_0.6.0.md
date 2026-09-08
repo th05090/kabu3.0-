@@ -16,7 +16,6 @@ kabu3.0 は、個人投資家向けに完全にローカル環境で動作する
 4. **マイテーマ・ポートフォリオ管理**: 抽出した銘柄を任意のテーマとして保存・管理し、パフォーマンスを追跡する機能。
 5. **テーマ内銘柄の分析**: 保存したテーマ内に含まれる構成銘柄の株価情報やファンダメンタル指標をリスト形式で一覧表示し、テーマ単位での比較・分析を行う機能。
 6. **買いアラートの提供**: 事前に定義されたテクニカル指標（パーフェクトオーダー、ゴールデンクロス等）やファンダメンタル条件に合致した銘柄を検知し、売買のタイミングをアラートとして提供する機能。
-7. **マーク・ミネルヴィニ SEPA 分析**: 3ヶ月単体四半期の成長加速、Stage 2上昇トレンド、およびVCP（ボラティリティ収縮パターン）ブレイクアウト候補を自動スクリーニング・診断する機能。
 
 ### 1.3 テクノロジースタック
 本システムはプライバシーとコストを重視し、高負荷なAI処理を含めすべてローカル環境内で完結するアーキテクチャを採用しています。
@@ -25,7 +24,7 @@ kabu3.0 は、個人投資家向けに完全にローカル環境で動作する
   - Next.js (App Router)
   - React, TypeScript
   - Vanilla CSS (UIスタイリング)
-  - Lightweight-charts / Recharts (チャート描画)
+  - Recharts (チャート描画)
   - Lucide-React (アイコン)
 - **データベース・検索エンジン**
   - **リレーショナルDB**: SQLite (`@libsql/client`) / FTS5 (全文検索・Sparse Search)
@@ -33,15 +32,14 @@ kabu3.0 は、個人投資家向けに完全にローカル環境で動作する
 - **AI・自然言語処理**
   - **ローカルLLM環境**: Ollama
   - **推論・生成モデル**: `gemma3:12b` (要約、GICS判定Stage1/2など) および Gemini API (GICS監査Stage3用)
-  - **リランカーモデル**: `hotchpotch/japanese-bge-reranker-v2-m3-v1` (Python FastAPI / ポート8000)
   - **埋め込みモデル**: `bge-m3` (1024次元 / テーマのベクトル化、RAG検索用)
 - **データ収集・解析 (バッチ処理)**
   - Node.js (バッチ処理スクリプト)
-  - Cheerio (IR Bankスクレイピング)
+  - Playwright (IR Bank等のWebスクレイピング、動的DOM解析)
   - Docling (Python/CUDA / 決算PDFの高精度Markdownパース)
 
 
-## 2. 画面構成とUI・フロントエンド設計 (UI & Screen Specifications)
+## 2. 画面構成とUI仕様 (UI & Screen Specifications)
 
 バックエンドのデータパイプラインやAI推論結果をエンドユーザーに提供するための、フロントエンドの主要な画面構成と画面遷移です。
 
@@ -52,11 +50,9 @@ kabu3.0 は、個人投資家向けに完全にローカル環境で動作する
 graph TD
     A[Sidebar (共通)] -->|ナビゲーション| B(メインスクリーナー `page.tsx`)
     A -->|ナビゲーション| C(テーマディスカバリー `themes/page.tsx`)
-    A -->|ナビゲーション| F(SEPA分析画面 `sepa/page.tsx`)
     
     B -->|ティッカークリック| D(銘柄詳細ページ `stocks/[ticker]/page.tsx`)
     C -->|マイテーマ/異常検知から| D
-    F -->|ティッカークリック| D
     
     A -->|データ同期実行| E((Data Sync API))
 ```
@@ -72,22 +68,22 @@ graph TD
   - **フィルタリング**: 東証業種、GICSセクター、PER、PBR、時価総額、ゴールデンクロス/パーフェクトオーダー発生有無など、複数条件の掛け合わせによる高度な絞り込み機能を備えます。
   - 仮想化（Virtualization）技術を利用し、数千件のデータをDOM遅延なしで高速スクロール・ソート可能にしています。
 
-### 2.3 テーマディスカバリー (`src/app/themes/page.tsx`)
+### 2.2 テーマディスカバリー (`src/app/themes/page.tsx`)
 自然言語による次世代の銘柄検索と、保存されたテーマポートフォリオの可視化を行う画面です。内部的に3つのタブで構成されています（`ThemeDiscoveryLayout`）。
 
-#### 2.3.1 テーマ検索タブ (`ThemeSearchTab`)
+#### 2.2.1 テーマ検索タブ (`ThemeSearchTab`)
 - **機能**: ユーザーが「円安メリット」「AI半導体」といった自然言語を入力すると、バックエンドでLLMが5個の関連キーワードに拡張し、Qdrant(Dense) + SQLite(Sparse) のハイブリッド検索 (RRF) に加え、Python側で独立稼働するリランカー（Cross-Encoder）を用いた最終スコアリングによって、最も合致する上位50銘柄を極めて高い精度でリストアップします。
 - **アクション**: 検索結果が良好であれば、任意の名前をつけて「マイテーマ」として保存（DBの `custom_themes` へ保存）できます。
 
-#### 2.3.2 マイテーマ管理タブ (`CustomThemesTab`)
+#### 2.2.2 マイテーマ管理タブ (`CustomThemesTab`)
 - **機能**: 保存済みのマイテーマ一覧を表示し、各テーマの構成銘柄とその類似度スコアを確認できます。
 - **可視化 (Network Graph)**: `react-force-graph-2d` を用いて、テーマ内の構成銘柄群をフォース・ディレクテッド・グラフ（ネットワーク図）として視覚的にマッピングします。これにより、テーマの中心的な銘柄（コア）と周辺銘柄（サテライト）の関係性を直感的に把握できます。
 
-#### 2.3.3 データクレンジング・異常検知タブ (`DataCleansingTab`)
+#### 2.2.3 データクレンジング・異常検知タブ (`DataCleansingTab`)
 - **機能**: バックエンドの `api/themes/anomalies/route.ts` によって検知された、「LLM監査によってGICS分類が『不適切（ERROR）』と判定された」銘柄をリスト表示します。
 - **アクション**: リストにはAIが判定した「監査エラー理由（gics_audit_reason）」が表示されます。画面上から直接「事業要約」や「キーワード」を手動修正し「保存」を押すことで、即座に再エンベディングAPIが走り、正しい分類へと自己修復させることが可能です。また、全銘柄の分類再計算バッチをキックすることもできます。
 
-### 2.4 銘柄詳細ページ (`src/app/stocks/[ticker]/page.tsx`)
+### 2.3 銘柄詳細ページ (`src/app/stocks/[ticker]/page.tsx`)
 個別銘柄の深い分析情報を集約したダッシュボード画面です（`StockAnalysisDashboard`）。
 
 - **AI決算分析レポート**:
@@ -99,10 +95,9 @@ graph TD
 - **企業プロファイル情報**:
   - 四季報からクレンジング抽出された「特徴要約」「関連キーワード」および、AIが判定した「GICSサブ産業カテゴリ」と「テーマ」を表示します。
 
-### 2.5 SEPA (ミネルヴィニ分析) 画面 (`src/app/sepa/page.tsx`)
+### 2.4 SEPA (ミネルヴィニ分析) 画面 (`src/app/sepa/page.tsx`)
 マーク・ミネルヴィニ（Mark Minervini）の SEPA (Specific Entry Point Analysis) 手法に基づく、トレンドテンプレート選定およびVCP（ボラティリティ収縮パターン）ブレイクアウト候補スクリーニング画面です（`SepaDashboard`）。
 
-#### 2.5.1 画面タブ機能概要
 - **トレンドテンプレートタブ (`TrendTemplateTab`)**:
   - 8つのステージ2条件を満たした銘柄群を一覧表示。
   - ファンダメンタルフィルター（EPS加速、売上加速、マージン拡大、黒字転換）による動的絞り込み。
@@ -115,43 +110,8 @@ graph TD
   - 銘柄コード入力により、当該銘柄のSEPA適合状況（Stage2の8条件、ファンダメンタル4項目、VCP健全性ガード）を一目で判定する個別詳細診断ビュー。
   - リスクリワード計算パネル（ピボット基準の損切り価格、目標価格、R:R比率）を搭載。
 
-#### 2.5.2 コンポーネント階層構造
-```text
-src/app/sepa/page.tsx
-└── SepaDashboard (.sepa-page-wrapper: 縦スクロールレイアウト)
-    ├── タブ切替ヘッダー ('trend' | 'vcp' | 'diagnostics')
-    ├── TrendTemplateTab
-    │   └── TrendFilterControls (EPS/売上/マージン/黒字転換トグル)
-    ├── VcpCandidatesTab (左右2ペインスプリット)
-    │   ├── 左ペイン: VCP銘柄リストテーブル
-    │   └── 右ペイン: 銘柄クイック詳細プレビュー
-    │       ├── ChecklistBadges (8条件・健全性バッジ)
-    │       └── SepaPriceChart (Base High / True Pivot / SMA表示)
-    └── DiagnosticsTab (銘柄コード直接入力診断)
-        ├── ChecklistBadges
-        ├── SepaPriceChart
-        └── RiskRewardPanel (ピボット基準のリスクリワード計算)
-```
 
-#### 2.5.3 チャート描画仕様 (`SepaPriceChart.tsx`)
-- **利用ライブラリ**: `lightweight-charts`
-- **描画要素とカラー定義**:
-  - 移動平均線: 50日SMA（青色 `#3b82f6` / 1.5px）、150日SMA（紫色 `#a855f7` / 1.5px）、200日SMA（赤色 `#ef4444` / 2px）
-  - ベース期間高値（Base High）: 橙色 `#f59e0b` / LineStyle: Dotted（点線）/ 1.5px
-  - 真のピボット（True Pivot Price）: 金色 `#eab308` / LineStyle: Dashed（破線）/ 2px
-- **スタイリングルール**: Tailwind CSSではなく `src/app/globals.css` のクラスおよびインラインスタイルを用い、親要素 `.sepa-page-wrapper` による垂直スクロールを保証する。
-
-### 2.6 フロントエンド状態管理と表示パフォーマンス最適化
-バックエンドの膨大なデータパイプラインやAI推論結果をエンドユーザーに提供するための、UI側のアーキテクチャ設計です。
-
-- **主要ファイル**: `src/features/screener/components/StockTable.tsx`, `src/features/themes/components/ThemeSearchTab.tsx`
-- **設計思想**:
-  - **仮想化（Virtualization）**: 約4,000銘柄を一括表示するスクリーナーにおいて、DOMの膨張によるブラウザのクラッシュを防ぐため、TanStack Table等を用いた仮想化レンダリングを採用し、画面に表示されている数十行のみを描画します。
-  - **動的クエリのUI連動**: テーマ検索時、LLMが拡張抽出したキーワード群は「編集可能なタグUI」として画面に表示されます。ユーザーがこれらを削除・追加することで、裏側のFTS5 Sparse検索の入力文字列が動的に再構築されるアーキテクチャとなっています。
-
-
-
-## 3. バックエンド・データパイプライン設計 (Backend Data Pipelines)
+## 3. システムアーキテクチャと設計思想 (Architecture & Design Principles)
 
 本章では、kabu3.0を構成する主要なデータパイプラインと、それを支える設計思想（利用ファイル、DBテーブル、コア関数など）について定義します。
 
@@ -159,46 +119,16 @@ src/app/sepa/page.tsx
 外部API（J-Quants等）からのデータ取得と、それに続くすべてのAI推論パイプライン（抽出・判定・分析）を統括する起点となるプロセスです。
 
 - **主要ファイル**: `src/app/api/data-sync/route.ts` (フロントエンドUIとSSE通信), `src/lib/jquants.ts` (同期オーケストレーション)
-- **利用DBテーブル**: `sync_history`, `daily_quotes`, `financials`, `stock_splits`, `stocks`, `sepa_metrics`
-- **J-Quants API エンドポイント**:
-  - 銘柄マスタ: `/v2/bulk/list?endpoint=equities/master` $\to$ `/v2/bulk/get?key={Key}` (全上場銘柄の一括CSV)
-  - 財務情報: `/v2/bulk/list?endpoint=fins/summary` $\to$ `/v2/bulk/get?key={Key}` (2024年以降・liveを対象)
-  - 日足株価: `/v2/bulk/list?endpoint=equities/bars/daily` $\to$ `/v2/bulk/get?key={Key}` (2024年以降・liveを対象)
+- **利用DBテーブル**: `sync_history`, `daily_quotes`, `financials`, `stock_splits`
 - **設計思想（冪等性と遡及調整）**:
-  - **差分同期**: 毎回全件取得するのではなく、`sync_history` テーブル（S3 Key単位）を活用して未取得のデータのみを効率的にダウンロード・バルクインサート（5,000件単位）します。
-  - **株式分割の自動遡及（AdjFactor）**:
-    日足CSVの各レコードにおいて、`AdjFactor` が存在し、かつ `AdjFactor != 1.0` かつ `AdjFactor > 0` の場合を検知します。
-    1. `stock_splits` テーブルに記録:
-       ```sql
-       INSERT INTO stock_splits (ticker, date, factor) VALUES (?, ?, ?)
-       ON CONFLICT DO NOTHING;
-       ```
-    2. 分割日より過去（`date < split_date`）の日足・財務レコードを同一トランザクション内で自動遡及更新（UPDATE）：
-       - **日足株価 (`daily_quotes`)**:
-         - 株価指標（乗算）: `adj_open = adj_open * factor`, `adj_high = adj_high * factor`, `adj_low = adj_low * factor`, `adj_close = adj_close * factor`
-         - 出来高（除算）: `adj_volume = adj_volume / factor`
-         ```sql
-         UPDATE daily_quotes SET 
-           adj_open = adj_open * ?, adj_high = adj_high * ?, adj_low = adj_low * ?, adj_close = adj_close * ?, 
-           adj_volume = adj_volume / ? 
-         WHERE ticker = ? AND date < ?;
-         ```
-       - **財務データ (`financials`)**:
-         - 1株当たり指標（乗算）: `adj_eps = adj_eps * factor`, `adj_dividend = adj_dividend * factor`
-         - 株式数（除算）: `adj_shares_outstanding = adj_shares_outstanding / factor`
-         ```sql
-         UPDATE financials SET 
-           adj_eps = adj_eps * ?, adj_dividend = adj_dividend * ?, 
-           adj_shares_outstanding = adj_shares_outstanding / ? 
-         WHERE ticker = ? AND date < ?;
-         ```
-       ※ J-Quants仕様において1:2分割の場合は `factor = 0.5` が配信されるため、株価・1株指標は $0.5$ 倍（半値）、株式数・出来高は $0.5$ で除算（2倍）となり、時系列の連続性が物理的に100%整合します。
-  - **AIパイプライン・指標再計算のキック**: データ取得後、更新があった銘柄に対して「決算書AI解析パイプライン（3.2章）」や「新規事業IR抽出（3.4章）」を順次トリガーし、最終ステップとして全銘柄スクリーナー用キャッシュ（`stocks`）の再計算、およびミネルヴィニSEPA指標（`sepa_metrics`）の自動再計算（`calculateAndPopulateSepa`）を実行してシステム全体を最新状態に同期します。
+  - **差分同期**: 毎回全件取得するのではなく、`sync_history` テーブルを活用して未取得のデータのみを効率的にダウンロードします。
+  - **株式分割の自動遡及（AdjFactor）**: 日足データ取得時に株式分割係数（AdjFactor）を検知した場合、データベース内の過去の全株価・財務レコードに対して自動で係数調整（UPDATE）を実行します。
+  - **AIパイプラインのキック**: データ取得後、更新があった銘柄に対して「決算書AI解析パイプライン（3.2章）」や「新規事業IR抽出（3.4章）」を順次トリガーし、システム全体を最新状態に同期します。
 
 ### 3.2 決算書AI解析パイプライン (Docling + RAG)
 決算PDFからの情報抽出において、LLMのハルシネーション（嘘の生成や単位変換ミス）を防ぐため、物理的なパースとRAG検索を組み合わせたハイブリッド・パイプラインです。
 
-- **主要ファイル**: `src/features/earnings/index.ts` (抽出オーケストレータ), `src/scripts/analyze_stock_rag.ts` (AIレポート生成)
+- **主要ファイル**: `src/lib/earnings_processor.ts` (抽出オーケストレータ), `src/scripts/analyze_stock_rag.ts` (AIレポート生成)
 - **利用DB/モデル**: Qdrant (`financial_reports`), Ollama (`gemma3:12b`, `bge-m3`)
 - **対象外銘柄**: 「ETF、ETN、REIT、投資法人、ファンド、TOKYO PRO Market」に該当する銘柄はバッチ処理の対象から厳格に除外されます。
 - **処理フロー**:
@@ -243,29 +173,17 @@ Dense検索（意味検索）とSparse検索（キーワード一致）を融合
 - **主要ファイル**: `src/scripts/fetch_ir_news.ts`, `src/scripts/analyze_ir_news.ts`
 - **利用DB/モデル**: SQLite (`ir_news`), Qdrant (`company_profiles`)
 - **処理フロー**:
-  1. **クローラー抽出 (`src/scripts/fetch_ir_news.ts`)**:
-     - **スクレイピング技術**: ブラウザ不要の軽量高速パースを実現するため `fetch` + `cheerio` を採用。
-     - **検索対象URL**: `https://irbank.net/td/search?q=${encodeURIComponent(keyword)}`
-     - **対象キーワード**: `["新規事業", "事業開始", "参入"]`
-     - **期間制約**: 直近5カレンダー日以内（`limitDays = 5`）。日付行が5日を超えた時点で当該キーワードのスクレイピングを早期break。
-     - **DOMセレクタ・抽出仕様**:
-       - 一覧テーブル行: `table.cs tr`
-       - 日付セパレータ行: `td.lf`（正規表現 `/(\d{4})年(\d{1,2})月(\d{1,2})日/` でパース）
-       - データ行: `td` 要素が4つ以上存在する行
-         - ティッカー: `tds[1] a`（※IR Bankのティッカーが4桁の場合は末尾に "0" を付加して5桁コードに正規化）
-         - 開示タイトルおよび開示ID: `tds[3] a`（リンクテキストをタイトルとし、`href` の `/td/{id}` から開示IDを抽出）
-       - PDFダウンロード: `https://irbank.net/pdf/{id}.pdf`
-     - **ローカル保存規則**: `data/pdfs/{ticker}_ir_newbiz_{date}_{id}.pdf`
-     - **DB登録**: `ir_news` テーブル（`id`, `ticker`, `title`, `date`, `pdf_path`, `analyzed = 0`）にレコードを保存。
-  2. **Phase 1 (推論フェーズ - `src/features/ir_news/phase1_inference.ts`)**:
-     - `ir_news` から `analyzed = 0` の未解析レコードを取得。
-     - `src/scripts/pdf_to_md_docling.py` (Docling) を用いてPDFをMarkdownに変換。
-     - ローカルLLM (`gemma3:12b`) を用いて、テキストから「事業領域」「コア技術」「ターゲット」「検索用類義語」をJSON形式で全件一括抽出（インメモリ配列に蓄積）。
-  3. **Phase 2 (ベクトル化フェーズ - `src/features/ir_news/phase2_vectorization.ts`)**:
-     - 推論完了後、抽出されたJSONメタデータを `bge-m3` でベクトル化。
-     - Qdrantの `company_profiles` へ全件一括で追加・更新（upsert）。
-     - VRAMの断片化とモデル切り替えのオーバーヘッドを防ぐため、Phase 1（推論）と Phase 2（埋め込み）は厳密に逐次分離実行されます。処理完了後、`ir_news.analyzed = 1` に更新します。
+  1. **クローラー抽出**: `fetch_ir_news.ts` がIR Bank経由で指定されたキーワードを含む最新の開示資料をスクレイピングし、PDFをダウンロードします（命名規則: `{証券コード}_ir_newbiz_{日付}_{ID}.pdf`）。
+  2. **Phase1 (推論フェーズ)**: nalyze_ir_news.ts が未解析のレコードを取得し、Doclingを用いてPDFをMarkdownに変換します。その後、LLM (gemma4:12b等) を用いて、テキストから「事業領域」「コア技術」「ターゲット」「関連語」をJSON形式で全件一括抽出（インメモリ配列に保存）します。
+  3. **Phase2 (ベクトル化フェーズ)**: 推論フェーズ完了後、抽出されたJSONメタデータを ge-m3 でベクトル化し、Qdrantの company_profiles へ全件一括で追加・更新します。VRAMの断片化とモデル切り替えのオーバーヘッドを防ぐため、Phase1とPhase2は厳密に分離されています。これにより、新規事業の動向が即座に動的テーマ検索（3.3章）へ反映されます。
 
+### 3.5 フロントエンド状態管理と仮想化アーキテクチャ
+バックエンドの膨大なデータパイプラインやAI推論結果をエンドユーザーに提供するための、UI側のアーキテクチャ設計です。
+
+- **主要ファイル**: `src/features/screener/components/StockTable.tsx`, `src/features/themes/components/ThemeSearchTab.tsx`
+- **設計思想**:
+  - **仮想化（Virtualization）**: 約4,000銘柄を一括表示するスクリーナーにおいて、DOMの膨張によるブラウザのクラッシュを防ぐため、TanStack Table等を用いた仮想化レンダリングを採用し、画面に表示されている数十行のみを描画します。
+  - **動的クエリのUI連動**: テーマ検索時、LLMが拡張抽出したキーワード群は「編集可能なタグUI」として画面に表示されます。ユーザーがこれらを削除・追加することで、裏側のFTS5 Sparse検索の入力文字列が動的に再構築されるアーキテクチャとなっています。
 
 ## 4. ディレクトリ・モジュール構成 (Directory Structure)
 
@@ -275,44 +193,25 @@ Dense検索（意味検索）とSparse検索（キーワード一致）を融合
 kabu3.0/
 ├── src/
 │   ├── app/                 # Next.js App Router (ページおよびBFFエンドポイント)
-│   │   ├── api/             # RESTful API ルート群
-│   │   │   ├── sepa/        # SEPA BFF API (trend, vcp-candidates, diagnostics)
-│   │   │   ├── themes/      # テーマ検索・マイテーマAPI
-│   │   │   ├── stocks/      # 個別銘柄情報・事業要約API
-│   │   │   └── data-sync/   # J-Quantsデータ同期SSEトリガー
-│   │   ├── sepa/            # SEPA分析ダッシュボード画面 (page.tsx)
-│   │   ├── stocks/[ticker]/ # 銘柄詳細ダッシュボード画面 (page.tsx)
-│   │   └── themes/          # テーマディスカバリー画面 (page.tsx)
+│   │   ├── api/             # RESTful API ルート群 (themes, stocks, data-sync等)
+│   │   └── ...              # 各画面の page.tsx (フロントエンドエントリー)
 │   │
-│   ├── components/          # アプリケーション全体で共通利用するUI部品 (Sidebar, SyncButton等)
+│   ├── components/          # アプリケーション全体で共通利用するUI部品 (SyncButton等)
 │   │
 │   ├── features/            # ドメイン駆動設計に基づく機能別モジュール群 (Feature Slices)
-│   │   ├── sepa/            # SEPA関連UIコンポーネント・フック・型定義
-│   │   │   ├── components/  # SepaDashboard, SepaPriceChart, ChecklistBadges, etc.
-│   │   │   ├── hooks/       # useSepa データフェッチフック
-│   │   │   └── types/       # SEPA専用 TypeScript 型定義 (sepa.ts)
-│   │   ├── earnings/        # 決算PDF解析・Docling・RAG抽出
-│   │   ├── ir_news/         # 新規事業IR適時開示解析・推論
-│   │   ├── analysis/        # AI決算分析・個別チャート描画
+│   │   ├── analysis/        # AI決算分析・チャート描画コンポーネント
 │   │   ├── screener/        # 全銘柄スクリーナー、仮想化テーブル描画
 │   │   └── themes/          # テーマ検索UI、マイテーマ管理、ネットワークグラフ
 │   │
 │   ├── lib/                 # アプリケーション全体で共有されるコアビジネスロジック
-│   │   ├── sepa/            # SEPA計算エンジン
-│   │   │   ├── index.ts     # SEPAパイプライン統括 & sepa_metrics テーブル永続化
-│   │   │   ├── trend_calculator.ts # Stage 2 トレンド判定 & 掲載日Backwards Walk探索
-│   │   │   ├── rs_calculator.ts    # 1〜99パーセンタイル動的加重RS (10日猶予除外)
-│   │   │   ├── quarterly_parser.ts # 3ヶ月単独期パース & 物理減算
-│   │   │   ├── quarterly_standalone.ts # ファンダメンタル急成長率 & Q4会計ノイズガード
-│   │   │   └── vcp_screener.ts     # Base High / True Pivot / ATR収縮 / VDU
 │   │   ├── calculator.ts    # テクニカル指標・ファンダメンタル指標の計算エンジン
 │   │   ├── db.ts            # SQLite (libsql) 接続およびクエリラッパー
+│   │   ├── earnings_processor.ts # 決算PDF抽出パイプライン (Docling + RAG)
 │   │   ├── gics.ts          # GICS分類マスタ連携ヘルパー
-│   │   ├── jquants.ts       # J-Quants API クライアント & 同期後SEPA自動連携
+│   │   ├── jquants.ts       # J-Quants API クライアント
 │   │   └── anomaly_detector.ts # データ異常値・テーマ乖離検出
 │   │
 │   ├── scripts/             # 非同期で稼働する独立したNode.js/Pythonバッチ処理群
-│   │   ├── calculate_sepa.ts # SEPA再計算CLIスクリプト
 │   │   ├── rag/             # RAG専用のモジュール群 (chunker, embedder, qdrant, prompts)
 │   │   ├── run_sync.ts      # 日次データ同期・遡及調整ジョブ
 │   │   ├── run_theme_batch.ts # 決算書PDFパースとセグメント抽出バッチ
@@ -325,7 +224,7 @@ kabu3.0/
 │   └── data/                # マスターデータおよびドキュメント
 │       ├── gics_dictionary.ts # GICS分類マスタと東証業種ハード制約定義
 │       ├── gics_categories.json # GICSベクトルの静的データ
-│       └── docs/            # ユーザーガイドなどのMarkdownナレッジベース (sepa_user_guide.md 等)
+│       └── docs/            # ユーザーガイドなどのMarkdownナレッジベース (KB)
 │
 ├── data/                    # バッチ処理が生成・管理する物理ファイル群
 │   ├── pdfs/                # 決算資料やIRニュースの元PDFおよび変換済みMarkdownファイル
@@ -335,7 +234,7 @@ kabu3.0/
 │
 ├── local.db                 # アプリケーションのメインデータベース (SQLite)
 ├── .env.local               # システム環境変数（ポートやパス設定など）
-├── AGENTS.md                # AI開発エージェント向けの振る舞い・コーディングルール
+├── Agent.md                 # AI開発エージェント向けの振る舞い・コーディングルール
 └── SPEC.md                  # 本仕様書 (SSOT)
 ```
 
@@ -388,167 +287,30 @@ J-Quantsから取得した日足株価、財務情報、および株式分割履
   - `id` (TEXT PK): ドキュメントID
   - `ticker`, `title`, `date`, `pdf_path` (TEXT): 取得したIR資料の基本情報とローカル保存パス
   - `analyzed` (INTEGER): DoclingパースおよびAIメタデータ抽出が完了したかどうかのフラグ（0: 未解析, 1: 解析済）
-
-#### 5.1.3 SEPA指標キャッシュテーブル
 - **`sepa_metrics` (SEPA指標・VCP候補キャッシュ)**
-  - `src/lib/sepa/index.ts` の `calculateAndPopulateSepa()` によって一括計算・更新されるテーブル。全上場銘柄のトレンドテンプレート、日本株独自RSレーティング、3ヶ月単体四半期ファンダメンタルズ、VCP・ピボット指標を保持します。
+  - `ticker` (TEXT PK): 銘柄コード
+  - トレンド指標: `is_stage2` (INTEGER), `sma50_above_sma150` (INTEGER), `sma150_above_sma200` (INTEGER), `sma200_trending_up` (INTEGER), `above_52w_low_pct` (REAL), `within_52w_high_pct` (REAL), `slope_22` (REAL), `rs_rating` (INTEGER), `stage2_entry_date` (TEXT)
+  - ファンダメンタル指標: `eps_acceleration` (INTEGER), `sales_acceleration` (INTEGER), `margin_expansion` (INTEGER), `is_turnaround` (INTEGER), `latest_q_eps_growth` (REAL), `latest_q_sales_growth` (REAL)
+  - VCP・ピボット指標: `is_vcp_candidate` (INTEGER), `atr_contraction_ratio` (REAL), `volume_dryup_ratio` (REAL), `pivot_price` (REAL), `base_high` (REAL), `base_depth_pct` (REAL), `is_handle_healthy` (INTEGER), `distance_to_pivot_pct` (REAL), `is_breakout` (INTEGER)
+  - 管理情報: `updated_at` (TEXT)
 
-```sql
-CREATE TABLE IF NOT EXISTS sepa_metrics (
-  ticker TEXT PRIMARY KEY,
-  name TEXT,
-  market TEXT,
-  industry TEXT,
-  latest_date TEXT,
-  current_price REAL,
-  sma_50 REAL,
-  sma_150 REAL,
-  sma_200 REAL,
-  is_above_sma_50 INTEGER,
-  is_above_sma_150 INTEGER,
-  is_above_sma_200 INTEGER,
-  is_sma_50_above_150_200 INTEGER,
-  is_sma_150_above_200 INTEGER,
-  sma_200_slope_22d REAL,
-  is_sma200_uptrend_1m INTEGER,
-  is_sma200_uptrend_5m INTEGER,
-  low_52w REAL,
-  distance_from_low_52w_pct REAL,
-  high_52w REAL,
-  distance_to_high_52w_pct REAL,
-  is_ipo INTEGER,
-  is_trend_template_pass INTEGER,
-  passed_conditions_count INTEGER,
-  stage2_entry_date TEXT,
-  rs_score_raw REAL,
-  rs_rating INTEGER,
-  is_pseudo_rs INTEGER,
-  sales_yoy_pct REAL,
-  op_yoy_pct REAL,
-  ordinary_profit_yoy_pct REAL,
-  eps_yoy_pct REAL,
-  growth_status TEXT,
-  is_growth_accelerating INTEGER,
-  is_margin_expanding INTEGER,
-  has_3y_annual_growth INTEGER,
-  has_accounting_noise_risk INTEGER,
-  standalone_sales REAL,
-  standalone_op REAL,
-  standalone_profit REAL,
-  standalone_eps REAL,
-  roe REAL,
-  market_cap REAL,
-  avg_trading_value_5d REAL,
-  base_high REAL,
-  base_depth_pct REAL,
-  pivot_price REAL,
-  pivot_distance_pct REAL,
-  is_near_pivot INTEGER,
-  is_pivot_breakout INTEGER,
-  is_handle_healthy INTEGER,
-  atr_10 REAL,
-  atr_50 REAL,
-  atr_contraction_ratio REAL,
-  is_volatility_contracted INTEGER,
-  volume_5d_avg REAL,
-  volume_50d_avg REAL,
-  volume_dryup_ratio REAL,
-  is_volume_dryup INTEGER,
-  ir_catalyst_count INTEGER,
-  latest_ir_title TEXT,
-  latest_ir_date TEXT
-);
-```
+#### 5.1.3 アプリケーション状態管理系テーブル
+スクリーナー表示用の計算済みキャッシュや、ユーザー定義のデータ、システムバッチの状態を管理します。
 
-```typescript
-// src/features/sepa/types/sepa.ts
-export type QuarterlyGrowthStatus =
-  | 'GROWTH'           // 前年同期比プラス成長 (正常)
-  | 'EXPLOSIVE_GROWTH' // EPS +300%以上 かつ 売上+10%以上の正真正銘の大成長
-  | 'TURNAROUND'        // 黒字転換 (前年赤字 -> 当期黒字)
-  | 'LOSS_REDUCTION'   // 赤字縮小 (前年赤字 -> 当期赤字だが改善)
-  | 'LOSS_EXPANSION'   // 赤字拡大 (前年赤字 -> 当期赤字で悪化)
-  | 'DEFICIT_FALL'     // 赤字転落 (前年黒字 -> 当期赤字)
-  | 'IRREGULAR_PERIOD' // 変則決算・会計期間不整合による除外
-  | 'NO_DATA';         // データ不足
+- **`stocks` (スクリーナー用キャッシュ)**: 約4,000銘柄のテクニカル・ファンダメンタル指標を事前計算して格納する巨大テーブルです。フロントエンドの表示速度を担保します。
+  - 基本情報: `ticker` (PK), `name`, `current_price` 等
+  - トレンド指標: `sma_25`, `is_above_sma_25`, `is_golden_cross`, `is_perfect_order`, `long_term_trend` 等
+  - ブレイクアウト: `high_52w`, `is_high_52w_update` 等
+  - オシレータ・ボラティリティ: `rsi`, `macd`, `atr_14`, `stop_loss_2atr` 等
+  - ファンダメンタルズ: `market_cap`, `per`, `pbr`, `roe`, `dividend_yield_pct`, `revenue_growth_pct` 等
+  - 決算リアクション: `earnings_reaction_pct`, `post_earnings_rise_pct` 等
+- **`custom_themes`, `custom_theme_stocks` (マイテーマ管理)**: ユーザーが作成したポートフォリオ（テーマ）とその構成銘柄・類似度スコアを保存します。
+- **`sync_history` (同期履歴)**: J-Quantsデータの差分同期を管理（`key` PK, `synced_at`）。
 
-export interface SepaTrendMetrics {
-  current_price: number;
-  sma_50: number | null;
-  sma_150: number | null;
-  sma_200: number | null;
-  is_above_sma_50: boolean;
-  is_above_sma_150: boolean;
-  is_above_sma_200: boolean;
-  is_sma_50_above_150_200: boolean;
-  is_sma_150_above_200: boolean;
-  sma_200_slope_22d: number | null;
-  is_sma200_uptrend_1m: boolean;
-  is_sma200_uptrend_5m: boolean;
-  low_52w: number | null;
-  distance_from_low_52w_pct: number | null;
-  high_52w: number | null;
-  distance_to_high_52w_pct: number | null;
-  is_ipo: boolean;
-  is_trend_template_pass: boolean;
-  passed_conditions_count: number;
-  stage2_entry_date: string | null;
-}
-
-export interface SepaRsMetrics {
-  rs_score_raw: number | null;
-  rs_rating: number | null;     // 1〜99 パーセンタイル
-  is_pseudo_rs: boolean;        // IPO等で63〜251日の短期間加重 (擬似RSフラグ)
-}
-
-export interface SepaFundamentalsMetrics {
-  sales_yoy_pct: number | null;
-  op_yoy_pct: number | null;
-  ordinary_profit_yoy_pct: number | null;
-  eps_yoy_pct: number | null;
-  growth_status: QuarterlyGrowthStatus;
-  is_growth_accelerating: boolean;
-  is_margin_expanding: boolean;
-  has_3y_annual_growth: boolean;
-  has_accounting_noise_risk: boolean;
-  standalone_sales: number | null;
-  standalone_op: number | null;
-  standalone_profit: number | null;
-  standalone_eps: number | null;
-  roe: number | null;
-  market_cap: number | null;
-  avg_trading_value_5d: number | null;
-}
-
-export interface SepaVcpMetrics {
-  base_high: number | null;
-  base_depth_pct: number | null;
-  pivot_price: number | null;
-  pivot_distance_pct: number | null;
-  is_near_pivot: boolean;
-  is_pivot_breakout: boolean;
-  is_handle_healthy: boolean;
-  atr_10: number | null;
-  atr_50: number | null;
-  atr_contraction_ratio: number | null;
-  is_volatility_contracted: boolean;
-  volume_5d_avg: number | null;
-  volume_50d_avg: number | null;
-  volume_dryup_ratio: number | null;
-  is_volume_dryup: boolean;
-}
-
-export interface SepaStockRecord extends SepaTrendMetrics, SepaRsMetrics, SepaFundamentalsMetrics, SepaVcpMetrics {
-  ticker: string;
-  name: string;
-  market: string;
-  industry: string;
-  latest_date: string;
-  ir_catalyst_count?: number;
-  latest_ir_title?: string;
-  latest_ir_date?: string;
-}
-```
+#### 5.1.4 FTS5 (全文検索) 仮想テーブル
+Qdrant（Dense Search）と組み合わせるための、SQLite組み込みのSparse Search（BM25スコア）用テーブルです。N-gram (`trigram`) トークナイザを利用します。
+- **`equities_fts`**: 銘柄の自然言語検索用。(`ticker`, `summary`, `theme_keywords` を対象に検索)
+- **`gics_fts`**: GICSカテゴリの検索用。(`sub_industry_id`, `category_name`, `description` を対象に検索)
 
 ### 5.2 Qdrant ベクトルデータベース (Vector DB)
 自然言語による意味検索（Semantic Search）やRAG（Retrieval-Augmented Generation）のためのベクトルストアです。
@@ -556,32 +318,10 @@ export interface SepaStockRecord extends SepaTrendMetrics, SepaRsMetrics, SepaFu
 - **埋め込みモデル**: `bge-m3` (Ollama経由)
 - **ベクトル次元数**: 1024次元
 - **類似度計算 (Metric)**: Cosine (コサイン類似度)
-- **コレクション定義・Payloadスキーマ**:
-  1. **`financial_reports` コレクション**:
-     - **用途**: 決算PDF（Markdownパース済）の見出し・段落チャンクを保存。RAG抽出（Pass 1/Pass 2）の検索対象。
-     - **Point ID**: `${ticker}_${period}_${chunk_index}` のMD5ハッシュから生成された決定的UUID。
-     - **Payload スキーマ**:
-       - `ticker` (string): 5桁銘柄コード（フィルター用）
-       - `period` (string): `'prev'` (前期) または `'latest'` (当期)（フィルター用）
-       - `text` (string): 見出しパンくずリスト付きチャンク本文
-     - **全文検索インデックス**: ハイブリッド検索のため、`text` フィールドに全文検索インデックス（`type: 'text', tokenizer: 'word', min_token_len: 2, max_token_len: 15, lowercase: true`）を構築。
-  2. **`company_profiles` コレクション**:
-     - **用途**: 企業の事業要約やIRニュースのメタデータをベクトル化したもの。動的テーマ検索やマイテーマ構成銘柄の抽出対象。
-     - **Point ID**: 銘柄コード (`ticker`) からMD5ハッシュにより生成された決定的UUID。
-     - **Payload スキーマ**:
-       - `ticker` (string): 5桁銘柄コード
-       - `name` (string): 企業名
-       - `summary` (string): AI生成・手動修正された事業詳細要約文
-       - `keywords` (string): 機能的価値キーワード群（カンマ区切り）
-       - `text` (string): ベクトル生成時に結合された元テキスト
-  3. **`gics_categories` コレクション**:
-     - **用途**: GICS（世界産業分類基準）の158サブ産業カテゴリの名称と説明文をベクトル化したもの。銘柄のGICSハイブリッド分類時のDense検索対象。
-     - **Point ID**: GICSサブ産業ID (`sub_industry_id`) からMD5ハッシュにより生成された決定的UUID。
-     - **Payload スキーマ**:
-       - `id` (string): GICS 8桁コード（例: `"10101010"`、※REIT `6010` 系は除外）
-       - `name` (string): GICSサブ産業名
-       - `description` (string): カテゴリ定義解説文
-       - `text` (string): `【カテゴリ名】\n${name}\n\n【説明】\n${description}`
+- **主要コレクション (Collections)**:
+  1. **`financial_reports`**: 決算PDF（Markdownパース済）の見出し・段落チャンクを保存。RAG抽出（Pass 1/Pass 2）の検索対象。
+  2. **`company_profiles`**: `equities_master` の事業要約やキーワードをベクトル化したもの。テーマ検索やマイテーマ構成銘柄の抽出対象。
+  3. **`gics_categories`**: GICSの158サブ産業カテゴリの名称と説明文をベクトル化したもの。銘柄のGICSハイブリッド分類時のDense検索対象。
 
 
 ## 6. API・インターフェース仕様 (API Specifications)
@@ -612,210 +352,55 @@ RESTfulなエンドポイント設計を基本としつつ、LLM呼び出しや�
 - **`POST /api/themes/[id]/stocks`**
   - **用途**: 既存のマイテーマに単一の銘柄を手動で追加します（重複時はスキップ）。
 
-### 6.3 動的テーマ検索・リランカー連携API
+### 6.3 動的テーマ検索・LLM拡張API
 - **`POST /api/themes/expand-query`**
   - **用途**: ユーザーが入力した自然言語（例：「円安メリット」）を、Qwen2.5 (14B) モデルを用いて関連する周辺キーワード（具体的な要素技術や製品名）に拡張・抽出します。出力を厳格に安定させるため、Few-Shotプロンプトと `num_ctx: 2048` を使用します。
 - **`POST /api/themes/search`**
   - **用途**: 高度なハイブリッドテーマ検索を実行します。
-  - **処理フロー**:
-    1. **拡張キーワードによる同時検索**: QdrantのDense検索（`company_profiles` コサイン類似度）と、SQLiteのSparse検索（`equities_fts` BM25）を並行実行。
-    2. **Local RRF (Reciprocal Rank Fusion)**: 定数 `K = 60` を用いて Dense と Sparse の順位を融合（`Score = 1 / (60 + DenseRank) + 1 / (60 + SparseRank)`）。上位100件（Top 100）を抽出。
-    3. **Python Cross-Encoder リランカー呼び出し (ポート8000)**:
-       - **エンドポイント**: `POST http://127.0.0.1:8000/rerank`
-       - **リクエスト仕様**:
-         ```json
-         {
-           "query": "拡張検索プロンプト（string）",
-           "documents": ["候補銘柄のsummaryまたはtheme_keywords配列（string[]）"]
-         }
-         ```
-       - **レスポンス仕様**:
-         ```json
-         {
-           "scores": [1.45, -0.23, ...] // 生の未正規化Logit値（float[]）
-         }
-         ```
-       - **スコア統合・ソート処理**:
-         - 返却された各銘柄の生スコアを `rerank_score` に格納し、表示スコア `search_score` を `rerank_score` で上書き。
-         - リランカーAPIエラーまたはタイムアウト時は、フォールバックとして元の `rrfScore` を維持。
-         - 全件を `search_score` の降順でソートし、最上位50件（Top 50）をフロントエンドへ返却。
+  - **処理フロー**: 拡張キーワードを用いて、QdrantのDense検索（`company_profiles`）とSQLiteのSparse検索（`equities_fts` BM25）を同時実行し、Local RRF (k=60) アルゴリズムによって融合させます（上位100件）。その後、Python側で独立稼働するリランカーAPI（ポート8000）を呼び出してスコアの再計算・ソートを行い、最終的なランキング（Top 50）を返します。
 - **`GET /api/themes/anomalies`**
   - **用途**: `gics_audit_status = 'ERROR'` の銘柄を検索し、LLM監査によってGICS分類が不適切と判定された異常値銘柄を検知・取得します。
 
 ### 6.4 バッチ制御トリガーAPI
 Next.jsのAPIコンテキストから、独立したNode.jsのバックグラウンドジョブをキックするためのエンドポイントです。
 
+- **`POST /api/data-sync`**
+  - **用途**: フロントエンドのSyncボタンから呼び出され、データ同期からAI決算解析、再計算までを一気通貫で行うオーケストレーションジョブ（`jquants.ts` 等）をトリガーします。
+  - **レスポンス**: `text/event-stream` (Server-Sent Events) でストリーミングされ、各処理ステップで `{"type": "progress", "message": "..."}` を返し、完了時に `{"type": "done"}` を返します。
 - **`POST /api/batch/reclassify`**
   - **用途**: `run_gics_classification.ts` 等を呼び出し、業種再分類やテーマの再判定バッチを非同期でトリガーします。
 - **`POST /api/batch/audit-gics`**
   - **用途**: 未監査（`PENDING`）またはエラーとなっている銘柄に対し、`run_llm_audit_batch.ts` を呼び出してGICS分類のLLM監査を非同期で一括実行します。
 - **`POST /api/data-sync`**
-  - **用途**: フロントエンドのSyncボタンから呼び出され、データ同期からAI決算解析、テクニカル・SEPA指標再計算までを一気通貫で行うオーケストレーションジョブ（`syncJQuants`）をトリガーします。
+  - **用途**: フロントエンドのSyncボタンから呼び出され、データ同期から再計算までを一気通貫で行うオーケストレーションジョブ（`syncJQuants`）をトリガーします。
   - **処理フロー**: 
     1. J-Quantsからの日足・財務等の差分取得と株式分割の遡及調整。
     2. J-Quantsの更新をトリガーとしつつ、ローカルに実在する最新のPDFファイルを逆引きして参照。新規の「決算短信PDF」が存在する場合にのみパース、セグメント情報抽出を実行します。過去決算が存在する場合は差分比較を、存在しない場合は単独分析によるAIアナリストレポートの自動生成を行います（`processEarningsReports` -> `generateAiReport`）。
-    3. 全銘柄スクリーナー指標の再計算と `stocks` テーブルの更新（`calculateAndPopulateStocks`）。
-    4. ミネルヴィニSEPA指標・VCP候補の全件再計算と `sepa_metrics` テーブルの更新（`calculateAndPopulateSepa`）。
+    3. テクニカル・ファンダメンタル指標の再計算と `stocks` テーブルの更新（`calculateAndPopulateStocks`）。
   - **レスポンス**: `text/event-stream` (Server-Sent Events) でストリーミングされ、各処理ステップで `{"type": "progress", "message": "..."}` を返し、完了時に `{"type": "done"}` を返します。
 
 ### 6.5 SEPA (ミネルヴィニ分析) BFF API群
 SEPAダッシュボードおよび個別診断ビューをサポートするRoute Handlers群です。
 
 - **`GET /api/sepa/trend`**
-  - **用途**: `sepa_metrics` テーブルからStage 2トレンドテンプレート銘柄一覧を取得します。
-  - **クエリパラメータ**:
-    - `filter`: `'all_pass'` (`is_trend_template_pass = 1`, デフォルト), `'all'`, `'ipo_only'` (`is_ipo = 1`), `'turnaround'` (`growth_status = 'TURNAROUND'`)
-    - `min_rs`: RSレーティング下限（例: `70`）
-    - `accelerating`: `'true'` の場合 `is_growth_accelerating = 1`
-    - `margin_expansion`: `'true'` の場合 `is_margin_expanding = 1`
-    - `sweet_spot_cap`: `'true'` の場合 時価総額100〜1,000億円 (`market_cap >= 100 AND market_cap <= 1000`)
-    - `min_liquidity`: `'true'` の場合 5日平均売買代金1億円以上 (`avg_trading_value_5d >= 1.0`)
-    - `search`: ティッカーまたは銘柄名の部分一致検索
-    - `page`: ページ番号 (デフォルト `1`)
-    - `limit`: 1ページあたりの件数 (デフォルト `50`, 最大 `100`)
-  - **レスポンス形式**:
-    ```json
-    {
-      "success": true,
-      "data": [ /* SepaStockRecord 配列 */ ],
-      "total": 125,
-      "page": 1,
-      "limit": 50,
-      "totalPages": 3
-    }
-    ```
-
+  - **用途**: `sepa_metrics` テーブルから `is_stage2 = 1` の銘柄一覧を取得します。
+  - **クエリパラメータ**: `epsAccel`, `salesAccel`, `marginExp`, `turnaround` (各 'true'/'false' でファンダメンタル条件を動的フィルタリング)。
 - **`GET /api/sepa/vcp-candidates`**
-  - **用途**: VCP収縮およびピボットブレイクアウト候補銘柄一覧を取得します（`is_trend_template_pass = 1` を前提）。
-  - **クエリパラメータ**:
-    - `mode`: 
-      - `'near_pivot'`: ピボット接近中 (`is_near_pivot = 1`, デフォルト)
-      - `'breakout'`: ブレイクアウト (`is_pivot_breakout = 1`)
-      - `'vdu_dryup'`: 出来高枯渇 (`is_volume_dryup = 1`)
-      - `'all'`: `(is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)`
-    - `page`: ページ番号 (デフォルト `1`)
-    - `limit`: 1ページあたりの件数 (デフォルト `50`, 最大 `100`)
-  - **ソート順**: `ORDER BY is_pivot_breakout DESC, pivot_distance_pct DESC, rs_rating DESC`
-  - **レスポンス形式**:
-    ```json
-    {
-      "success": true,
-      "data": [ /* SepaStockRecord 配列 */ ],
-      "total": 42,
-      "page": 1,
-      "limit": 50,
-      "totalPages": 1
-    }
-    ```
-
+  - **用途**: `is_stage2 = 1` かつ `is_vcp_candidate = 1` の銘柄一覧を取得します。
+  - **ソート**: ピボットまでの距離（`distance_to_pivot_pct ASC`）順でソートされ、ブレイクアウト間近の銘柄を優先表示。
 - **`GET /api/sepa/diagnostics/[ticker]`**
-  - **用途**: 指定銘柄のSEPA詳細診断情報（Stage2の8条件判定、四半期単体ファンダメンタルズ、VCP・ピボット状態、および直近300日分の日足時系列チャートデータ）を取得します。
-  - **レスポンス形式**:
-    ```json
-    {
-      "success": true,
-      "data": {
-        "stock": { /* SepaStockRecord */ },
-        "quotes": [
-          { "date": "2026-03-31", "open": 2500, "high": 2550, "low": 2480, "close": 2530, "volume": 120000 }
-        ]
-      }
-    }
-    ```
+  - **用途**: 指定銘柄のSEPA詳細診断情報（Stage2の8条件、ファンダメンタル判定、VCP収縮度、日足チャート用データ）を取得します。
+  - **チャートデータ取得**: `daily_quotes` から直近260営業日（約1年分）の日足株価（終値、高値、安値、出来高、50/150/200日SMA）を `ORDER BY date DESC LIMIT 260) ORDER BY date ASC` のサブクエリにより時系列順で提供します。
 
-## 7. コアロジックと計算アルゴリズム (Core Logic & Algorithms)
 
-本章では、スクリーナーで利用されるテクニカル・ファンダメンタル指標の厳密な物理計算式、マーク・ミネルヴィニ SEPA 計算エンジン、東証ハード制約、およびkabu3.0のドメイン固有の知能を司るLLMの完全なプロンプト群を網羅して定義します。
+## 7. コアロジックとアルゴリズム (Core Logic & Algorithms)
 
-### 7.1 テクニカル・ファンダメンタル指標計算式 (`src/lib/calculator.ts`)
-スクリーナー表示やアラート提供のためにSQL（またはTS）で計算される各指標の厳密な物理定義です。
+本章では、kabu3.0のドメイン固有の知能を司るLLMの完全なプロンプト群と、スクリーナーで利用されるテクニカル・ファンダメンタル計算式の具体的な定義を記載します。
 
-- **時価総額 (億円)**: `最新株価 * 調整後発行済株式数 / 100,000,000`
-- **TTM 純利益および TTM PER (株価収益率)**:
-  日本企業の四半期累計開示特性に対応したロールオーバー（LTM/TTM）純利益から逆算します。
-  - 最新開示が通期（FY）の場合:
-    $`TTM\_Profit = 最新通期当期純利益 (latest\_fy\_profit)`$
-  - 最新開示が第1〜第3四半期（Q1〜Q3）の場合（累計ロールオーバー式）:
-    $`TTM\_Profit = 前年度通期純利益 + 当期累計純利益 - 前年同期累計純利益`$
-  - $`TTM\_EPS = TTM\_Profit / adj\_shares\_outstanding`$
-  - $`PER = 最新株価 / TTM\_EPS`$ (※前期純利益がゼロ以下の場合は `NULL`)
-- **PBR (株価純資産倍率)**: `最新株価 / (自己資本 / 発行済株式数)`
-- **ROE (自己資本利益率, %)**: `TTM_Profit / 自己資本 * 100`
-- **ROA (総資産利益率, %)**: `TTM_Profit / 総資産 * 100`
-- **営業利益率 (%)**: `営業利益 / 売上高 * 100`
-- **自己資本比率 (%)**: `(equity_to_asset_ratio) * 100`
-- **配当利回り (%)**: `調整後予想配当 / 最新株価 * 100`
-- **成長率指標 (売上/営利/EPS)**: `(次期予想 / 前期実績 * 100) - 100` ※前期が0以下の場合は異常値となるため `NULL` として除外。
-- **予想達成率 (%)**: `営業利益実績 / 次期予想営業利益 * 100`
-- **単純移動平均 (SMA 25/75/200)**: 過去指定日数の `adj_close` の平均。
-- **SMA乖離率 (%)**: `(現在値 - SMA) / SMA * 100`
-- **RSI (14日)**: `14日間の平均値上がり幅 / (14日間の平均値上がり幅 + 平均値下がり幅) * 100`
-- **MACD**: `12日EMA - 26日EMA` (MACDシグナルはMACDの9日EMA)
-- **ATR (Average True Range, 14日)**: `Max(当日高値-当日安値, 当日高値-前日終値, 前日終値-当日安値)` の14日間平均。
-- **パーフェクトオーダー**: `現在値 > SMA25 AND SMA25 > SMA75 AND SMA75 > SMA200` がすべて成立。
-- **ゴールデンクロス**: `当日: SMA25 > SMA75 AND 前日: SMA25 <= SMA75`
-- **高値ブレイクアウト**: `当日の高値 >= 過去N日間(20日, 60日, 52週)の最高値`
-- **出来高倍率 (`volume_ratio`)**: `当日の出来高 (current_volume) / 過去25日間の平均出来高 (avg_volume_past_25d)`
-- **売買代金倍率 (`trading_value_ratio`)**: `当日の売買代金 (current_turnover) / 過去25日間の平均売買代金 (avg_turnover_past_25d)`
-- **決算リアクション (%)**: `(決算翌日の終値 - 決算前日の終値) / 決算前日の終値 * 100`
-
-### 7.2 マーク・ミネルヴィニ SEPA 計算エンジン (`src/lib/sepa/`)
-株式投資の世界的名著『ミネルヴィニの成長株投資法』に基づく、Stage 2 上昇トレンド、ファンダメンタル急加速、およびVCP（ボラティリティ収縮パターン）の物理計算エンジンです。
-
-#### 7.2.1 3ヶ月単独期（QoQ）ファンダメンタル算出 (`quarterly_parser.ts`, `quarterly_standalone.ts`)
-日本の有価証券報告書・決算短信の累計開示データから、正確な「3ヶ月単独四半期」の実績を物理減算により復元・比較します。
-- **3ヶ月単独値の復元式**:
-  - Q1単独: $Q1$
-  - Q2単独: $Q2_{累計} - Q1$
-  - Q3単独: $Q3_{累計} - Q2_{累計}$
-  - Q4単独: $通期実績 - Q3_{累計}$
-- **QoQ 成長率**: 前年同期の3ヶ月単独実績との前年同期比（YoY）を算出。
-- **EPS加速 (`eps_acceleration`)**: 最新QのEPS成長率 > 前QのEPS成長率 かつ 最新Q成長率 $\ge +20\%$
-- **売上加速 (`sales_acceleration`)**: 最新Qの売上成長率 > 前Qの売上成長率 かつ 最新Q成長率 $\ge +10\%$
-- **営業利益率拡大 (`margin_expansion`)**: 最新Qの営業利益率（OP / Sales） > 前年同期の営業利益率
-- **黒字転換 (`is_turnaround`)**: 前年同期が営業赤字（OP $\le 0$）から、今期黒字転換（OP $> 0$）
-- **Q4会計ノイズガード**: 売上YoYが+10%未満なのにEPSだけが急増（+300%以上）している場合は一過性の特殊要因（資産売却・税効果等）とみなし、EPS加速フラグを安全に除外。
-
-#### 7.2.2 トレンドテンプレート判定・掲載日算出 (`trend_calculator.ts`)
-ミネルヴィニのStage 2上昇トレンドを判定する8大条件：
-1. **株価 > 150日SMA かつ 株価 > 200日SMA**
-2. **150日SMA > 200日SMA**
-3. **200日SMAが上向き（最低1ヶ月/22営業日以上）**: 22日間のSMA200の線形回帰傾きがプラス（$\beta > 0$）
-4. **50日SMA > 150日SMA かつ 50日SMA > 200日SMA**
-5. **株価 > 50日SMA**
-6. **株価が52週安値から最低30%以上上昇（$\ge +30\%$）**
-7. **株価が52週高値から25%以内（`within_52w_high_pct` $\ge -25\%$）**
-8. **RSレーティング $\ge 70$（後述）**
-※IPO新興株バイパス: 200営業日未満のIPO銘柄については、SMA200関連条件をスキップし、データ存在する期間（SMA50等）でのみ判定。
-- **掲載日（Stage 2突入日：`stage2_entry_date`）の遡及算出**:
-  - 最新日でStage 2に合致した銘柄に対し、日足過去データを直近から過去へ順次遡り（Backwards Walk）、8条件を満たし続けた最も古い連続期間の開始日を突入日として特定・記録。リストから一時脱落した後に復帰した場合でも、最新の突入日が記録されます。
-
-#### 7.2.3 独自レラティブストレングス（RS）パーセンタイル算出 (`rs_calculator.ts`)
-日本市場全上場銘柄（約4,200銘柄）を母集団として、IBD方式の加重株価パフォーマンスを算出し、1〜99のパーセンタイル順位を付与。
-- **加重スコア式**: $Score = 2 \times P_{63} + P_{126} + P_{189} + P_{252}$ （直近四半期のパフォーマンスを2倍に加重）
-- **上場廃止銘柄の自動除外**: 市場全体の最新取引日（`latest_market_date`）から10カレンダー日以上更新のない銘柄は、RS計算母集団およびSEPA指標算出から自動除外。
-
-#### 7.2.4 VCP（ボラティリティ収縮）およびベース・ピボット算出 (`vcp_screener.ts`)
-1. **ベース期間高値（`base_high`）**: 直近65営業日から直近2営業日までの終値最高値。
-2. **ベース深さ（`base_depth_pct`）**: ベース期間最高値からの最大下落率。ベース深さが35%超（$-35\%$ 未満）の場合は深いベースとして除外。
-3. **真のピボット（`pivot_price`）**: 直近2〜15営業日前（ハンドル形成部）の終値最高値を真のピボットとする（当日・前日のノイズを避けるため2営業日前から）。
-4. **ピボット健全性ガード（`is_handle_healthy`）**: ハンドル部ピボットが高値から深く押しすぎていないかを検証（$pivot\_price \ge base\_high \times 0.85$）。15%以上乖離した安値圏の局所高値はピボットとして不適格。
-5. **ボラティリティ収縮率（`atr_contraction_ratio`）**: ハンドル部ATR(5) / ベース初期ATR(20) が $0.70$ 未満（30%以上の収縮）。
-6. **出来高ドライアップ率（`volume_dryup_ratio`）**: 直近5日平均出来高 / 50日平均出来高 が $0.60$ 未満（40%以上の枯渇）。
-7. **ブレイクアウト判定**:
-   - 接近中: 当日終値がピボット価格の $-3\%$ 以内
-   - ブレイクアウト: 当日終値がピボット価格の $+0\% \sim +5\%$ 以内
-
-### 7.3 東証33業種 -> GICS ハード制約マッピング (`TSE_TO_GICS_MAPPING`)
-ハルシネーションによる大分類の誤りを防ぐため、`src/lib/anomaly_detector.ts` 等で定義された `TSE_TO_GICS_MAPPING` を利用します。
-- (例) `情報・通信業` $\to$ 許可されるGICSセクター: `情報通信`, `一般消費財・サービス`, `資本財`, `金融`, `ヘルスケア`, `不動産`
-- (例) `銀行業` $\to$ 許可されるGICSセクター: `金融`
-※この制約フィルターを通過しないGICSカテゴリは、どれだけベクトル類似度が高くても棄却されます。
-
-### 7.4 RAGパイプライン・プロンプト設計と安全装置
+### 7.1 RAGパイプラインとAIプロンプト設定
 決算書PDFや四季報データから情報を抽出・分類するためのプロンプト設定です。すべて `gemma3:12b` (Ollama) に最適化されています。
 
-#### 7.4.1 決算書PDF抽出プロンプト (src/scripts/rag/theme_prompts.ts, src/lib/segment_extractor.ts)
+#### 7.1.1 決算書PDF抽出プロンプト (src/scripts/rag/theme_prompts.ts, src/lib/segment_extractor.ts)
 
 **Stage 3: Qdrantプレーンテキスト抽出用 (フォールバック)**
 ```text
@@ -906,7 +491,7 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
 { "summary": "1文要約" }
 ```
 
-#### 7.4.2 決算アナリストレポート生成プロンプト (`src/scripts/analyze_stock_rag.ts`)
+#### 7.1.2 決算アナリストレポート生成プロンプト (`src/scripts/analyze_stock_rag.ts`)
 2つのドキュメント（前回決算と最新決算）の差分を抽出し、プロのアナリスト文章に清書します。
 
 **Step 1: 事実抽出ボット（System Prompt）**
@@ -933,7 +518,7 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
 6. ※もし抽出データが全くなく、評価が不可能な場合は、捏造せず各項目に「記載なし」または「評価不能」と出力してください。
 ```
 
-#### 7.4.3 GICS 3段階分類・再分類プロンプト (src/scripts/run_gics_classification.ts, src/features/gics/classifier.ts)
+#### 7.1.3 GICS 3段階分類・再分類プロンプト (src/scripts/run_gics_classification.ts, src/features/gics/classifier.ts)
 
 **Stage 1 (Top 10 → Top 3 絞り込み)**
 ```text
@@ -1025,7 +610,7 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
 {finalGicsDescription}
 ```
 
-#### 7.4.4 動的テーマ検索・キーワード拡張プロンプト (`src/app/api/themes/expand-query/route.ts`)
+#### 7.1.4 動的テーマ検索・キーワード拡張プロンプト (`src/app/api/themes/expand-query/route.ts`)
 自然言語検索時に入力された曖昧なクエリを、FTS5（Sparse Search）で検索可能な周辺キーワードに拡張します。
 ```text
 あなたは日本株式市場のテーマ投資検索システム向けクエリ拡張AIです。
@@ -1046,7 +631,7 @@ User: {query}
 Assistant:
 ```
 
-#### 7.4.5 IRニュース分析プロンプト (`src/scripts/analyze_ir_news.ts`)
+#### 7.1.5 IRニュース分析プロンプト (`src/scripts/analyze_ir_news.ts`)
 ```text
 あなたは企業のIR資料（適時開示）から、ベクトル検索データベースのインデックス構築に最適なメタデータを抽出・生成する専門のAIアシスタントです。
 
@@ -1076,8 +661,7 @@ Assistant:
 }
 ```
 
-
-#### 7.4.6 LLM出力揺れの補正とTS側の安全装置 (Output Sanitization)
+### 7.2 LLM出力揺れの補正とTS側の安全装置 (Output Sanitization)
 LLM（とくにローカルのgemma3:12b等）は指定フォーマットを逸脱する出力揺れを起こすため、パイプラインの随所にTypeScript側での強固な補正ロジックを挟んでいます。
 
 - **無限ループ（タイムアウト）の完全防止（JSONフォーマット強制）**:
@@ -1093,6 +677,79 @@ LLM（とくにローカルのgemma3:12b等）は指定フォーマットを逸�
 - **余分な装飾・不要文字の除去**:
   - `expand-query` API では、LLMが「です・ます」や不要な句点（。）、改行を追加した場合を想定し、文字列処理で確実に不要文字を除去してクエリ化します。
 
+### 7.3 東証33業種 -> GICS ハード制約マッピング
+ハルシネーションによる大分類の誤りを防ぐため、`src/lib/anomaly_detector.ts` 等で定義された `TSE_TO_GICS_MAPPING` を利用します。
+- (例) `情報・通信業` → 許可されるGICSセクター: `情報通信`, `一般消費財・サービス`, `資本財`, `金融`, `ヘルスケア`, `不動産`
+- (例) `銀行業` → 許可されるGICSセクター: `金融`
+※この制約フィルターを通過しないGICSカテゴリは、どれだけベクトル類似度が高くても棄却されます。
+
+### 7.4 テクニカル・ファンダメンタル指標計算式 (`src/lib/calculator.ts`)
+スクリーナー表示やアラート提供のためにSQL（またはTS）で計算される各指標の定義です。
+
+- **時価総額 (億円)**: `最新株価 * 調整後発行済株式数 / 100,000,000`
+- **PER (株価収益率)**: `最新株価 / 直近4期分のEPS合計` (TTM: Trailing Twelve Months EPSを採用)
+- **営業利益率 (%)**: `営業利益 / 売上高 * 100`
+- **自己資本比率 (%)**: `(equity_to_asset_ratio) * 100`
+- **配当利回り (%)**: `調整後予想配当 / 最新株価 * 100`
+- **成長率指標 (売上/営利/EPS)**: `(次期予想 / 前期実績 * 100) - 100` ※前期が0以下の場合は異常値となるため `NULL` として除外。
+- **予想達成率 (%)**: `営業利益実績 / 次期予想営業利益 * 100`
+- **単純移動平均 (SMA 25/75/200)**: 過去指定日数の `adj_close` の平均。
+- **SMA乖離率 (%)**: `(現在値 - SMA) / SMA * 100`
+- **RSI (14日)**: `14日間の平均値上がり幅 / (14日間の平均値上がり幅 + 平均値下がり幅) * 100`
+- **MACD**: `12日EMA - 26日EMA` (MACDシグナルはMACDの9日EMA)
+- **ATR (Average True Range, 14日)**: `Max(当日高値-当日安値, 当日高値-前日終値, 前日終値-当日安値)` の14日間平均。
+- **パーフェクトオーダー**: `現在値 > SMA25 AND SMA25 > SMA75 AND SMA75 > SMA200` がすべて成立。
+- **ゴールデンクロス**: `当日: SMA25 > SMA75 AND 前日: SMA25 <= SMA75`
+- **高値ブレイクアウト**: `当日の高値 >= 過去N日間(20日, 60日, 52週)の最高値`
+- **出来高/売買代金倍率**: `当日の出来高 / 過去25日間の平均出来高`
+- **決算リアクション (%)**: `(決算翌日の終値 - 決算前日の終値) / 決算前日の終値 * 100`
+
+### 7.5 マーク・ミネルヴィニ SEPA 計算エンジン (`src/lib/sepa/`)
+株式投資の世界的名著『ミネルヴィニの成長株投資法』に基づく、Stage 2 上昇トレンド、ファンダメンタル急加速、およびVCP（ボラティリティ収縮パターン）の物理計算エンジンです。
+
+#### 7.5.1 3ヶ月単独期（QoQ）ファンダメンタル算出 (`quarterly_parser.ts`, `quarterly_standalone.ts`)
+日本の有価証券報告書・決算短信の累計開示データから、正確な「3ヶ月単独四半期」の実績を物理減算により復元・比較します。
+- **3ヶ月単独値の復元式**:
+  - Q1単独: $Q1$
+  - Q2単独: $Q2_{累計} - Q1$
+  - Q3単独: $Q3_{累計} - Q2_{累計}$
+  - Q4単独: $通期実績 - Q3_{累計}$
+- **QoQ 成長率**: 前年同期の3ヶ月単独実績との前年同期比（YoY）を算出。
+- **EPS加速 (`eps_acceleration`)**: 最新QのEPS成長率 > 前QのEPS成長率 かつ 最新Q成長率 $\ge +20\%$
+- **売上加速 (`sales_acceleration`)**: 最新Qの売上成長率 > 前Qの売上成長率 かつ 最新Q成長率 $\ge +10\%$
+- **営業利益率拡大 (`margin_expansion`)**: 最新Qの営業利益率（OP / Sales） > 前年同期の営業利益率
+- **黒字転換 (`is_turnaround`)**: 前年同期が営業赤字（OP $\le 0$）から、今期黒字転換（OP $> 0$）
+- **Q4会計ノイズガード**: 売上YoYが+10%未満なのにEPSだけが急増（+300%以上）している場合は一過性の特殊要因（資産売却・税効果等）とみなし、EPS加速フラグを安全に除外。
+
+#### 7.5.2 トレンドテンプレート判定・掲載日算出 (`trend_calculator.ts`)
+ミネルヴィニのStage 2上昇トレンドを判定する8大条件：
+1. **株価 > 150日SMA かつ 株価 > 200日SMA**
+2. **150日SMA > 200日SMA**
+3. **200日SMAが上向き（最低1ヶ月/22営業日以上）**: 22日間のSMA200の線形回帰傾きがプラス（$\beta > 0$）
+4. **50日SMA > 150日SMA かつ 50日SMA > 200日SMA**
+5. **株価 > 50日SMA**
+6. **株価が52週安値から最低30%以上上昇（$\ge +30\%$）**
+7. **株価が52週高値から25%以内（$\le -25\%$）**
+8. **RSレーティング $\ge 70$（後述）**
+※IPO新興株バイパス: 200営業日未満のIPO銘柄については、SMA200関連条件をスキップし、データ存在する期間（SMA50等）でのみ判定。
+- **掲載日（Stage 2突入日：`stage2_entry_date`）の遡及算出**:
+  - 最新日でStage 2に合致した銘柄に対し、日足過去データを直近から過去へ順次遡り（Backwards Walk）、8条件を満たし続けた最も古い連続期間の開始日を突入日として特定・記録。リストから一時脱落した後に復帰した場合でも、最新の突入日が記録されます。
+
+#### 7.5.3 独自レラティブストレングス（RS）パーセンタイル算出 (`rs_calculator.ts`)
+日本市場全上場銘柄（約4,200銘柄）を母集団として、IBD方式の加重株価パフォーマンスを算出し、1〜99のパーセンタイル順位を付与。
+- **加重スコア式**: $Score = 2 \times P_{63} + P_{126} + P_{189} + P_{252}$ （直近四半期のパフォーマンスを2倍に加重）
+- **上場廃止銘柄の自動除外**: 市場全体の最新取引日（`latest_market_date`）から10カレンダー日以上更新のない銘柄は、RS計算母集団およびSEPA指標算出から自動除外。
+
+#### 7.5.4 VCP（ボラティリティ収縮）およびベース・ピボット算出 (`vcp_screener.ts`)
+1. **ベース期間高値（`base_high`）**: 直近65営業日から直近2営業日までの終値最高値。
+2. **ベース深さ（`base_depth_pct`）**: ベース期間最高値からの最大下落率。ベース深さが35%超（$-35\%$ 未満）の場合は深いベースとして除外。
+3. **真のピボット（`pivot_price`）**: 直近2〜15営業日前（ハンドル形成部）の終値最高値を真のピボットとする（当日・前日のノイズを避けるため2営業日前から）。
+4. **ピボット健全性ガード（`is_handle_healthy`）**: ハンドル部ピボットが高値から深く押しすぎていないかを検証（$pivot\_price \ge base\_high \times 0.85$）。15%以上乖離した安値圏の局所高値はピボットとして不適格。
+5. **ボラティリティ収縮率（`atr_contraction_ratio`）**: ハンドル部ATR(5) / ベース初期ATR(20) が $0.70$ 未満（30%以上の収縮）。
+6. **出来高ドライアップ率（`volume_dryup_ratio`）**: 直近5日平均出来高 / 50日平均出来高 が $0.60$ 未満（40%以上の枯渇）。
+7. **ブレイクアウト判定**:
+   - 接近中: 当日終値がピボット価格の $-3\%$ 以内
+   - ブレイクアウト: 当日終値がピボット価格の $+0\% \sim +5\%$ 以内
 
 
 ## 8. エラーハンドリングと運用設計 (Error Handling & Operations)
@@ -1108,19 +765,15 @@ LLM（とくにローカルのgemma3:12b等）は指定フォーマットを逸�
   - DBへの書き込みは `INSERT OR REPLACE` や `INSERT OR IGNORE` を多用し、株式分割（`stock_splits`）の遡及計算も `ON CONFLICT DO NOTHING` と事前存在チェックを組み合わせて冪等性を担保しています。
 - **決算PDF解析 (`data/pdf_batch_history.json`)**:
   - `Docling` による重いPDFパース処理を回避するため、解析が完了したファイル履歴をJSON形式で記録し、未処理のPDFのみを対象とします。
-- **IRニュース自動取得・ベクトル化の冪等性**:
-  - `ir_news` テーブルの取得・登録時、同一日付・同一ティッカー・同一タイトルのニュースは重複チェックによりスキップします。
-  - Qdrantへの登録時は決定論的UUID（`MD5(ticker + "_" + published_at + "_" + title)`）を使用するため、何度再実行しても同一ポイントが上書き（Upsert）され、ベクトル空間が重複データで汚染されることはありません。
 
 ### 8.2 一時ファイルとロギング (`/scratch` ディレクトリ)
 検証用の出力やバッチのエラーログ、中間データのダンプは、ソースコード（`src/`）や永続データ（`data/`）を汚染しないよう、すべて `scratch/` ディレクトリに吐き出す運用としています。
 - **抽出生データ**: `scratch/step1_debug.json`（LLMのJSONフォーマット破綻調査用）
 - **バッチログ**: `scratch/phase2_output.log`, `scratch/shikiho_output.log`
 - **差分出力**: `scratch/phase2_changes.csv`（旧判定から新判定への移行確認用）
-- **一時検証スクリプト**: `scratch/check_*.ts`, `scratch/test_*.ts` 等の使い捨てコード
 
 ### 8.3 ローカルLLMのリソース競合・制約事項 (Resource Constraints)
-本システムの中核である `gemma3:12b` などのローカルLLM（Ollama経由）およびエンベディング（`bge-m3`）は、VRAMおよびシステムメモリを大きく占有します。
+本システムの中核である `gemma3:12b` などのローカルLLM（Ollama経由）は、VRAMおよびシステムメモリを大きく占有します。
 
 - **GPUメモリ競合の回避**:
   - LLM推論中または重いバッチ処理中（特に `run_gics_classification.ts` 等の並列処理中）に、**高負荷な3Dゲーム等を同時にプレイすると、GPUリソース（VRAM等）の競合によりOllamaの推論プロセスがクラッシュ（OOM等）したり、著しいパフォーマンス低下・タイムアウトを引き起こす危険性（「ゲームするとまずい」制約）**があります。
@@ -1128,54 +781,25 @@ LLM（とくにローカルのgemma3:12b等）は指定フォーマットを逸�
 
 ### 8.4 Qdrant と SQLite のバックアップ方針
 - **SQLite (`local.db`)**:
-  - 単一ファイルであるため、OSレベルのファイルコピーで容易に完全バックアップが可能です。
+  - 単一ファイルであるため、OSレベルのコピーで容易にバックアップが可能です。
 - **Qdrant**:
-  - 内部で `financial_reports`, `company_profiles`, `gics_categories` の3コレクションを管理しています。再構築が必要な場合は `equities_master` の `summary` と `theme_keywords`、および `ir_news` を元に再度エンベディングAPI（Ollama `bge-m3`）を実行することで完全復元が可能です。
+  - 内部で `company_profiles` 等のコレクションを管理しています。再構築が必要な場合は `equities_master` の `summary` と `theme_keywords` を元に再度エンベディングAPI（Ollama）を叩くことで完全復元が可能です（`src/app/api/stocks/[ticker]/summary/route.ts` などのロジックを流用）。
 
 
 ## 9. システム定数・設定値 (System Configuration)
+パイプラインや検索精度に影響を与える主要なハードコード定数および環境変数です。
 
-パイプライン、スクリーニング、およびハイブリッド検索精度に影響を与える主要なハードコード定数および環境変数の一覧です。
-
-### 9.1 AI / 機械学習モデル・検索設定
-| 設定項目 | 値 | 説明 |
-| :--- | :--- | :--- |
-| **LLM モデル** | `gemma3:12b` | Ollamaローカル実行。構造化抽出およびGICS分類判定に使用。 |
-| **Embedding モデル** | `bge-m3` | 次元数: 1024, Distance: Cosine。Dense検索用ベクトル。 |
-| **Reranker モデル** | `hotchpotch/japanese-bge-reranker-v2-m3-v1` | Python FastAPI (ポート 8000) で稼働するCross-Encoder。 |
-| **Ollama URL** | `http://localhost:11434/api/generate` | ローカルLLM推論エンドポイント。 |
-| **Qdrant URL** | `http://localhost:6333` | ローカルベクトル検索エンジンエンドポイント。 |
-| **Reranker URL** | `http://127.0.0.1:8000/rerank` | リランカー推論エンドポイント。 |
-| **RRF K値 (`RRF_K`)** | `60` | Hybrid Search 時の Dense/Sparse スコア統合の平滑化定数。 |
-| **Reranker 入力候補数** | 上位 `100` 件 | RRF結合スコア上位100件をリランカーサーバーへ送信。 |
-| **Reranker 出力足切り数** | 上位 `50` 件 | リランカーRaw Logitスコア降順で最終足切り。 |
-| **PDFチャンクサイズ** | `2,500` 文字 | `headerAwareChunker` による見出し維持チャンク分割の最大長。 |
-| **GICS分類 Sparse検索件数** | 上位 `158` 件 | GICS全サブインダストリ数と同数を事前検索。 |
-| **GICS分類 RRF Top抽出数** | 上位 `10` 件 | Stage 1 LLMプロンプトに入力し、上位3候補へ絞り込み。 |
-
-### 9.2 データベース・データ同期設定
-| 設定項目 | 値 | 説明 |
-| :--- | :--- | :--- |
-| **SQLite DBパス** | `file:local.db` | ローカルSQLiteデータベースファイル。 |
-| **SQLite バッチ挿入サイズ** | `5,000` 件 | J-Quantsデータのバルクインサート時のトランザクションコミット単位。 |
-
-### 9.3 ミネルヴィニ SEPA / VCP スクリーニング定数
-| 設定項目 | 値 | 説明 |
-| :--- | :--- | :--- |
-| **RSレーティング足切り閾値** | `70` | 市場全体の上位30%以上のモメンタム銘柄を適格判定。 |
-| **上場廃止除外猶予期間** | `10` 日 | 市場最新営業日より10日以上日足が更新されていない銘柄を除外。 |
-| **SMA200 傾き回帰期間** | `22` 営業日 | 最小二乗法によるSMA200の傾き（約1ヶ月分）を算出。 |
-| **ベース高値探索期間** | 直近 `2 〜 65` 営業日 | 当日および前日を除く約3ヶ月間の終値最高値をベース高値とする。 |
-| **ピボット価格探索期間** | 直近 `2 〜 15` 営業日 | 直近約3週間の局所高値をハンドル・ピボット価格とする。 |
-| **ハンドル健全性比率** | `>= 0.85` | ピボット価格がベース高値の85%以上（ベース上半部15%以内）に位置すること。 |
-| **ピボット接近判定レンジ** | `-5.0% 〜 0.0%` | 健全ハンドルかつ現在終値がピボット価格から-5%以内のセットアップ圏内。 |
-| **ATR収縮比率 (`ATR10 / ATR50`)** | `< 0.70` | 短期10日ATRが長期50日ATRの70%未満（30%以上の値幅収縮）で収縮判定。 |
-| **出来高枯渇比率 (`Vol5 / Vol50`)** | `< 0.60` | 5日平均出来高が50日平均の60%以下（40%以上の枯渇）でVDU判定。 |
-| **ピボットブレイクアウト判定** | `0.0% 〜 +3.0%` かつ 当日出来高 >= 50日平均 × 1.5 | 健全ハンドルからピボットを出来高急増を伴って上放れた状態を即時検知。 |
-
+- **LLM モデル**: `gemma3:12b` (Ollamaローカル実行)
+- **Embedding モデル**: `bge-m3` (次元数: 1024, Distance: Cosine)
+- **Qdrant URL**: `http://localhost:6333`
+- **Ollama URL**: `http://localhost:11434/api/generate`
+- **RRF K値 (`RRF_K`)**: `60` （Hybrid Search 時の Dense/Sparse スコア統合の平滑化定数）
+- **SQLite バッチ挿入サイズ**: `5,000` 件ずつ（J-Quantsデータのバルクインサート時のトランザクションサイズ）
+- **PDFチャンクサイズ**: `2,500` 文字（`headerAwareChunker`）
+- **GICS分類時のSparse検索 抽出件数制限**: 上位 `158` 件（GICS全カテゴリ数と同数）
+- **GICS分類時の RRF Top抽出数**: 上位 `10` 件 -> LLM（Stage 1）でさらに `3` 件に絞り込み。
 
 ## 10. 今後の課題・ロードマップ (Roadmap)
-
 現在のシステム構成における課題と、将来に向けた拡張構想です。
 
 1. **バッチ処理の高速化と並列化**
@@ -1186,3 +810,4 @@ LLM（とくにローカルのgemma3:12b等）は指定フォーマットを逸�
    - 新しく実装された「ベクトル外れ値検知（Peer Consistency）」に加え、財務諸表の不自然な変化（例: 売掛金の急増）などを自動検知するロジックの追加。
 4. **LLMプロンプトの外部管理**
    - ソースコード内にハードコードされている各種プロンプト（`theme_prompts.ts` 等）をDB化し、フロントエンドUIからABテストや微調整を行えるようにする。
+
