@@ -127,7 +127,7 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
       {/* 2ペイン分割: 左テーブル ＆ 右目視チャート */}
       <div className="sepa-split-layout">
         {/* 左: 銘柄一覧テーブル */}
-        <div className="sepa-table-wrapper" style={{ flex: 1, minWidth: '460px' }}>
+        <div className="sepa-table-wrapper" style={{ minWidth: 0 }}>
           <table className="sepa-table">
             <thead>
               <tr>
