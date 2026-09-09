@@ -82,6 +82,16 @@ export function SepaPriceChart({ quotes, pivotPrice, baseHigh }: SepaPriceChartP
       return smaData;
     };
 
+    // 25日SMA (紫 / 短期サポートライン)
+    if (sorted.length >= 25) {
+      const sma25Series = chart.addSeries(LineSeries, {
+        color: '#a855f7',
+        lineWidth: 2,
+        title: '25 SMA',
+      });
+      sma25Series.setData(calcSma(25));
+    }
+
     // 50日SMA (緑)
     if (sorted.length >= 50) {
       const sma50Series = chart.addSeries(LineSeries, {
@@ -175,6 +185,9 @@ export function SepaPriceChart({ quotes, pivotPrice, baseHigh }: SepaPriceChartP
   return (
     <div style={{ width: '100%', position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.5rem', padding: '0 0.25rem', flexWrap: 'wrap' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <span style={{ width: '12px', height: '3px', background: '#a855f7', borderRadius: '2px' }} /> 25 SMA
+        </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
           <span style={{ width: '12px', height: '3px', background: '#10b981', borderRadius: '2px' }} /> 50 SMA
         </span>

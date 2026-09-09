@@ -137,9 +137,9 @@ src/app/sepa/page.tsx
 #### 2.5.3 チャート描画仕様 (`SepaPriceChart.tsx`)
 - **利用ライブラリ**: `lightweight-charts`
 - **描画要素とカラー定義**:
-  - 移動平均線: 50日SMA（青色 `#3b82f6` / 1.5px）、150日SMA（紫色 `#a855f7` / 1.5px）、200日SMA（赤色 `#ef4444` / 2px）
-  - ベース期間高値（Base High）: 橙色 `#f59e0b` / LineStyle: Dotted（点線）/ 1.5px
-  - 真のピボット（True Pivot Price）: 金色 `#eab308` / LineStyle: Dashed（破線）/ 2px
+  - 移動平均線: 25日SMA（紫色 `#a855f7` / 2px / 短期サポート）、50日SMA（緑色 `#10b981` / 2px）、150日SMA（シアン `#06b6d4` / 2px）、200日SMA（ローズ `#f43f5e` / 2px）
+  - ベース期間高値（Base High）: 橙色 `#f97316` / LineStyle: Dotted（点線）/ 1px
+  - 真のピボット（True Pivot Price）: 金色 `#fbbf24` / LineStyle: Dashed（破線）/ 2px
 - **スタイリングルール**: Tailwind CSSではなく `src/app/globals.css` のクラスおよびインラインスタイルを用い、親要素 `.sepa-page-wrapper` による垂直スクロールを保証する。
 
 ### 2.6 フロントエンド状態管理と表示パフォーマンス最適化
