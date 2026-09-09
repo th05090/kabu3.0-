@@ -707,10 +707,7 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
   - **用途**: VCP収縮およびピボットブレイクアウト候補銘柄一覧を取得します（`is_trend_template_pass = 1` を前提）。
   - **クエリパラメータ**:
     - `mode`: 
-      - `'near_pivot'`: ピボット接近中 (`is_near_pivot = 1`, デフォルト)
-      - `'breakout'`: ブレイク直後 (`is_pivot_breakout = 1`)
-      - `'vdu_dryup'`: 出来高枯渇 (`is_volume_dryup = 1`)
-      - `'strict_funda'`: Stage 2 + コア成長 Tier 1 (`rs_rating >= 80` かつ 売上+10%↑, EPS+20%↑/黒字転換)
+      - `'strict_funda'`: Stage 2 + コア成長 Tier 1 (`rs_rating >= 80` かつ 売上+10%↑, EPS+20%↑/黒字転換, デフォルト)
       - `'all'`: 全VCP候補 `(is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)`
     - `sweet_spot_cap`: `'true'` の場合 時価総額100〜1,000億円のオーバーレイ
     - `min_liquidity`: `'true'` の場合 5日平均売買代金1億円以上のオーバーレイ

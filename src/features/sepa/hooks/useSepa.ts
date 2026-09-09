@@ -63,7 +63,7 @@ export function useSepaTrend(params: SepaTrendQueryParams) {
 }
 
 export function useSepaVcp(
-  mode: string = 'near_pivot',
+  mode: string = 'strict_funda',
   page: number = 1,
   limit: number = 50,
   sortBy?: string | null,

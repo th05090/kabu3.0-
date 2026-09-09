@@ -8,7 +8,7 @@ const db = createClient({
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const mode = searchParams.get('mode') || 'near_pivot'; // 'near_pivot', 'breakout', 'vdu_dryup', 'all', 'strict_funda'
+    const mode = searchParams.get('mode') || 'strict_funda'; // 'strict_funda', 'all'
     const excludeEtf = searchParams.get('exclude_etf') !== 'false'; // デフォルトで投信・ETF等を除外 (true)
     const sweetSpotCap = searchParams.get('sweet_spot_cap') === 'true'; // 時価総額100〜1,000億のオプショントグル
     const minLiquidity = searchParams.get('min_liquidity') === 'true'; // 売買代金1億以上のオプショントグル
@@ -23,16 +23,10 @@ export async function GET(req: Request) {
       conditions.push('is_operating_company = 1');
     }
 
-    if (mode === 'near_pivot') {
-      conditions.push('is_near_pivot = 1');
-    } else if (mode === 'breakout') {
-      conditions.push('is_pivot_breakout = 1');
-    } else if (mode === 'vdu_dryup') {
-      conditions.push('is_volume_dryup = 1');
-    } else if (mode === 'all') {
+    if (mode === 'all') {
       conditions.push('(is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)');
-    } else if (mode === 'strict_funda' || mode === 'tier1_funda') {
-      // Tier 1 (基本ハードフィルター): RS>=80 + 売上+10%↑ + EPS+20%↑(または黒字転換)
+    } else {
+      // デフォルト: Tier 1 (基本ハードフィルター: RS>=80 + 売上+10%↑ + EPS+20%↑(または黒字転換))
       conditions.push(`
         rs_rating >= 80 
         AND sales_yoy_pct >= 10.0 

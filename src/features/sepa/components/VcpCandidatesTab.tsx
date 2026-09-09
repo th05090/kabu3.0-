@@ -5,7 +5,7 @@ import { useSepaVcp, useSepaDiagnostics } from '../hooks/useSepa';
 import { SepaPriceChart } from './SepaPriceChart';
 import { SepaSortHeader } from './SepaSortHeader';
 import { Tier2ScoreBadges } from './Tier2ScoreBadges';
-import { Target, Zap, Activity, VolumeX, ExternalLink, CheckCircle2, Building2 } from 'lucide-react';
+import { Target, Activity, ExternalLink, CheckCircle2, Building2 } from 'lucide-react';
 import { SepaStockRecord } from '../types/sepa';
 import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
@@ -14,7 +14,7 @@ interface VcpCandidatesTabProps {
 }
 
 export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
-  const [mode, setMode] = useState<string>('near_pivot');
+  const [mode, setMode] = useState<string>('strict_funda');
   const [excludeEtf, setExcludeEtf] = useState<boolean>(true);
   const [sweetSpotCap, setSweetSpotCap] = useState<boolean>(false);
   const [minLiquidity, setMinLiquidity] = useState<boolean>(true);
@@ -53,27 +53,6 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
       {/* モード切替バー */}
       <div className="sepa-filter-box" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="sepa-btn-group">
-          <button
-            onClick={() => handleModeChange('near_pivot')}
-            className={`sepa-chip ${mode === 'near_pivot' ? 'active-amber' : ''}`}
-          >
-            <Target size={14} />
-            ピボット接近 (-5%〜0%)
-          </button>
-          <button
-            onClick={() => handleModeChange('breakout')}
-            className={`sepa-chip ${mode === 'breakout' ? 'active-green' : ''}`}
-          >
-            <Zap size={14} />
-            ブレイク直後 (出来高急増)
-          </button>
-          <button
-            onClick={() => handleModeChange('vdu_dryup')}
-            className={`sepa-chip ${mode === 'vdu_dryup' ? 'active-indigo' : ''}`}
-          >
-            <VolumeX size={14} />
-            出来高枯渇 (VDU &lt; 60%)
-          </button>
           <button
             onClick={() => handleModeChange('strict_funda')}
             className={`sepa-chip ${mode === 'strict_funda' ? 'active-emerald' : ''}`}
