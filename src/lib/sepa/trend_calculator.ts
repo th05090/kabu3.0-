@@ -52,9 +52,12 @@ export function calculateSepaTrend(quotes: RawDailyQuote[]): SepaTrendMetrics {
   // quotes は最新日降順 (0が最新)
   const defaultRes: SepaTrendMetrics = {
     current_price: 0,
+    sma_25: null,
     sma_50: null,
     sma_150: null,
     sma_200: null,
+    dist_sma25_pct: null,
+    dist_sma50_pct: null,
     is_above_sma_50: false,
     is_above_sma_150: false,
     is_above_sma_200: false,
@@ -69,6 +72,7 @@ export function calculateSepaTrend(quotes: RawDailyQuote[]): SepaTrendMetrics {
     distance_to_high_52w_pct: null,
     is_ipo: false,
     is_trend_template_pass: false,
+    is_trend_structural_pass: false,
     passed_conditions_count: 0,
     stage2_entry_date: null,
   };
@@ -82,14 +86,23 @@ export function calculateSepaTrend(quotes: RawDailyQuote[]): SepaTrendMetrics {
   const isIpo = quotes.length < 250;
   defaultRes.is_ipo = isIpo;
 
-  // 2. 移動平均線の算出
+  // 2. 移動平均線の算出 (25日, 50日, 150日, 200日)
+  const sma25 = calculateSma(quotes, 25);
   const sma50 = calculateSma(quotes, 50);
   const sma150 = calculateSma(quotes, 150);
   const sma200 = calculateSma(quotes, 200);
 
+  defaultRes.sma_25 = sma25;
   defaultRes.sma_50 = sma50;
   defaultRes.sma_150 = sma150;
   defaultRes.sma_200 = sma200;
+
+  if (sma25 != null && sma25 > 0) {
+    defaultRes.dist_sma25_pct = ((currentPrice - sma25) / sma25) * 100;
+  }
+  if (sma50 != null && sma50 > 0) {
+    defaultRes.dist_sma50_pct = ((currentPrice - sma50) / sma50) * 100;
+  }
 
   defaultRes.is_above_sma_50 = sma50 != null && currentPrice > sma50;
   defaultRes.is_above_sma_150 = sma150 != null && currentPrice > sma150;
@@ -154,6 +167,7 @@ export function calculateSepaTrend(quotes: RawDailyQuote[]): SepaTrendMetrics {
     const sma20 = calculateSma(quotes, 20);
     const isAboveSma = sma50 ? currentPrice > sma50 : (sma20 ? currentPrice > sma20 : true);
     defaultRes.is_trend_template_pass = isAboveSma && isHighCondition && isLowCondition;
+    defaultRes.is_trend_structural_pass = isHighCondition && isLowCondition;
     defaultRes.passed_conditions_count = defaultRes.is_trend_template_pass ? 8 : 4;
   } else {
     // 通常8条件チェック (RS除く7つのテクニカル条件)
@@ -167,6 +181,16 @@ export function calculateSepaTrend(quotes: RawDailyQuote[]): SepaTrendMetrics {
 
     defaultRes.passed_conditions_count = passedCount; // (RS70以上が加わると最大8)
     defaultRes.is_trend_template_pass = passedCount >= 7;
+
+    // 構造的Stage 2 (Close > sma_50 の一時的アンダーシュートを許容するプルバック判定用)
+    defaultRes.is_trend_structural_pass =
+      defaultRes.is_above_sma_150 &&
+      defaultRes.is_above_sma_200 &&
+      defaultRes.is_sma_150_above_200 &&
+      defaultRes.is_sma200_uptrend_1m &&
+      defaultRes.is_sma_50_above_150_200 &&
+      isLowCondition &&
+      isHighCondition;
   }
 
   // 6. 直近のStage 2突入日 (再浮上日) を過去時系列から逆算探索

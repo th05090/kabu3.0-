@@ -18,6 +18,7 @@ export async function GET(req: Request) {
     const accelerating = searchParams.get('accelerating') === 'true';
     const marginExpansion = searchParams.get('margin_expansion') === 'true';
     const sweetSpotCap = searchParams.get('sweet_spot_cap') === 'true';
+    const midLargeCap = searchParams.get('mid_large_cap') === 'true';
     const minLiquidity = searchParams.get('min_liquidity') === 'true';
     const minSalesGrowth = searchParams.get('min_sales_growth') ? Number(searchParams.get('min_sales_growth')) : null;
     const minProfitGrowth = searchParams.get('min_profit_growth') ? Number(searchParams.get('min_profit_growth')) : null;
@@ -97,6 +98,10 @@ export async function GET(req: Request) {
 
     if (sweetSpotCap) {
       conditions.push('market_cap >= 100 AND market_cap <= 1000');
+    }
+
+    if (midLargeCap) {
+      conditions.push('market_cap >= 300 AND market_cap <= 3000');
     }
 
     if (minLiquidity) {

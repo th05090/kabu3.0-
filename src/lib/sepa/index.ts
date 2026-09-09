@@ -3,7 +3,7 @@ import { calculateSepaTrend, RawDailyQuote } from './trend_calculator';
 import { calculateAllRsRatings, TickerQuotesMap } from './rs_calculator';
 import { calculateSepaFundamentals } from './quarterly_standalone';
 import { RawFinancialRow } from './quarterly_parser';
-import { calculateSepaVcp } from './vcp_screener';
+import { calculateSepaVcp, calculateSepaPullback } from './vcp_screener';
 import { SepaStockRecord } from '../../features/sepa/types/sepa';
 
 const db = createClient({
@@ -53,9 +53,12 @@ export async function ensureSepaTable() {
       is_operating_company INTEGER DEFAULT 1,
       latest_date TEXT,
       current_price REAL,
+      sma_25 REAL,
       sma_50 REAL,
       sma_150 REAL,
       sma_200 REAL,
+      dist_sma25_pct REAL,
+      dist_sma50_pct REAL,
       is_above_sma_50 INTEGER,
       is_above_sma_150 INTEGER,
       is_above_sma_200 INTEGER,
@@ -93,6 +96,14 @@ export async function ensureSepaTable() {
       avg_trading_value_5d REAL,
       base_high REAL,
       base_depth_pct REAL,
+      swing_high_20d REAL,
+      pullback_depth_pct REAL,
+      max_dd_60d REAL,
+      min_volume_5d REAL,
+      min_vdu_ratio REAL,
+      has_distribution_day INTEGER,
+      is_pullback_25 INTEGER,
+      is_pullback_50 INTEGER,
       pivot_price REAL,
       pivot_distance_pct REAL,
       is_near_pivot INTEGER,
@@ -273,6 +284,15 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
       s.roe != null ? Number(s.roe) : null
     );
     const vcp = calculateSepaVcp(quotes);
+    const pb = calculateSepaPullback(
+      quotes,
+      trend.sma_25,
+      trend.sma_50,
+      trend.sma_200,
+      trend.is_trend_structural_pass,
+      vcp.volume_50d_avg,
+      vcp.volume_dryup_ratio
+    );
     const ir = irMap.get(ticker);
 
     // RS70以上判定をトレンドテンプレート合致数に反映
@@ -290,11 +310,13 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?
       )`,
       args: [
         ticker, s.name, s.market, s.industry, isOp ? 1 : 0, quotes[0].date,
-        trend.current_price, trend.sma_50, trend.sma_150, trend.sma_200,
+        trend.current_price, trend.sma_25, trend.sma_50, trend.sma_150, trend.sma_200,
+        trend.dist_sma25_pct, trend.dist_sma50_pct,
         trend.is_above_sma_50 ? 1 : 0, trend.is_above_sma_150 ? 1 : 0, trend.is_above_sma_200 ? 1 : 0,
         trend.is_sma_50_above_150_200 ? 1 : 0, trend.is_sma_150_above_200 ? 1 : 0,
         trend.sma_200_slope_22d, trend.is_sma200_uptrend_1m ? 1 : 0, trend.is_sma200_uptrend_5m ? 1 : 0,
@@ -307,6 +329,8 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
         fund.standalone_sales, fund.standalone_op, fund.standalone_profit, fund.standalone_eps,
         fund.roe, fund.market_cap, fund.avg_trading_value_5d,
         vcp.base_high, vcp.base_depth_pct,
+        pb.swing_high_20d, pb.pullback_depth_pct, pb.max_dd_60d, pb.min_volume_5d, pb.min_vdu_ratio,
+        pb.has_distribution_day ? 1 : 0, pb.is_pullback_25 ? 1 : 0, pb.is_pullback_50 ? 1 : 0,
         vcp.pivot_price, vcp.pivot_distance_pct, vcp.is_near_pivot ? 1 : 0, vcp.is_pivot_breakout ? 1 : 0, vcp.is_handle_healthy ? 1 : 0,
         vcp.atr_10, vcp.atr_50, vcp.atr_contraction_ratio, vcp.is_volatility_contracted ? 1 : 0,
         vcp.volume_5d_avg, vcp.volume_50d_avg, vcp.volume_dryup_ratio, vcp.is_volume_dryup ? 1 : 0,

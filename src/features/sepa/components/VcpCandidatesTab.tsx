@@ -5,7 +5,7 @@ import { useSepaVcp, useSepaDiagnostics } from '../hooks/useSepa';
 import { SepaPriceChart } from './SepaPriceChart';
 import { SepaSortHeader } from './SepaSortHeader';
 import { Tier2ScoreBadges } from './Tier2ScoreBadges';
-import { Target, Activity, ExternalLink, CheckCircle2, Building2 } from 'lucide-react';
+import { Target, Activity, ExternalLink, CheckCircle2, Building2, Sparkles } from 'lucide-react';
 import { SepaStockRecord } from '../types/sepa';
 import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
@@ -17,13 +17,14 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
   const [mode, setMode] = useState<string>('strict_funda');
   const [excludeEtf, setExcludeEtf] = useState<boolean>(true);
   const [sweetSpotCap, setSweetSpotCap] = useState<boolean>(false);
+  const [midLargeCap, setMidLargeCap] = useState<boolean>(false);
   const [minLiquidity, setMinLiquidity] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
 
-  const { candidates, total, isLoading } = useSepaVcp(mode, page, 50, sortBy, order, excludeEtf, sweetSpotCap, minLiquidity);
+  const { candidates, total, isLoading } = useSepaVcp(mode, page, 50, sortBy, order, excludeEtf, sweetSpotCap, minLiquidity, midLargeCap);
   const { diagnostics, isLoading: diagLoading } = useSepaDiagnostics(selectedTicker);
 
   const handleSort = (field: string) => {
@@ -53,6 +54,7 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
       {/* モード切替バー */}
       <div className="sepa-filter-box" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="sepa-btn-group">
+          {/* 1. Stage2 + コア成長 (Tier 1) */}
           <button
             onClick={() => handleModeChange('strict_funda')}
             className={`sepa-chip ${mode === 'strict_funda' ? 'active-emerald' : ''}`}
@@ -61,9 +63,32 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
             <CheckCircle2 size={14} />
             Stage2 + コア成長 (Tier 1)
           </button>
+
+          {/* 2. ★ Stage2 + 25日押し目 (紫/メイン) */}
+          <button
+            onClick={() => handleModeChange('stage2_pullback_25')}
+            className={`sepa-chip ${mode === 'stage2_pullback_25' ? 'active-purple' : ''}`}
+            title="構造的Stage 2（RS>=75）かつ 25日SMAサポート押し目（直近高値から調整 -3%〜-12%、乖離 -1.5%〜+3.5%、出来高枯渇）"
+          >
+            <Sparkles size={14} />
+            ★ Stage2 + 25日押し目
+          </button>
+
+          {/* 3. Stage2 + 50日押し目 (シアン/サブ) */}
+          <button
+            onClick={() => handleModeChange('stage2_pullback_50')}
+            className={`sepa-chip ${mode === 'stage2_pullback_50' ? 'active-cyan' : ''}`}
+            title="構造的Stage 2（RS>=75）かつ 50日SMAサポート押し目（直近高値から調整 -5%〜-20%、乖離 -2.0%〜+3.5%、出来高枯渇）"
+          >
+            <Sparkles size={14} />
+            Stage2 + 50日押し目
+          </button>
+
+          {/* 4. 全VCP候補 (アンバー) */}
           <button
             onClick={() => handleModeChange('all')}
-            className={`sepa-chip ${mode === 'all' ? 'active-neutral' : ''}`}
+            className={`sepa-chip ${mode === 'all' ? 'active-amber' : ''}`}
+            title="Stage 2合格かつ ピボット接近・出来高枯渇・ATR収縮のいずれかを満たす全候補"
           >
             <Activity size={14} />
             全VCP候補
@@ -81,11 +106,29 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
           </button>
 
           <button
-            onClick={() => { setSweetSpotCap(!sweetSpotCap); setPage(1); }}
+            onClick={() => {
+              const next = !sweetSpotCap;
+              setSweetSpotCap(next);
+              if (next) setMidLargeCap(false);
+              setPage(1);
+            }}
             className={`sepa-chip ${sweetSpotCap ? 'active-amber' : ''}`}
             title="時価総額100〜1,000億円の中小型スイートスポット銘柄に限定"
           >
             時価総額 100〜1,000億
+          </button>
+
+          <button
+            onClick={() => {
+              const next = !midLargeCap;
+              setMidLargeCap(next);
+              if (next) setSweetSpotCap(false);
+              setPage(1);
+            }}
+            className={`sepa-chip ${midLargeCap ? 'active-indigo' : ''}`}
+            title="時価総額300〜3,000億円の中大型銘柄に限定"
+          >
+            時価総額 300〜3,000億
           </button>
 
           <button
@@ -107,128 +150,204 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
       <div className="sepa-split-layout">
         {/* 左: 銘柄一覧テーブル */}
         <div className="sepa-table-wrapper" style={{ minWidth: 0 }}>
-          <table className="sepa-table">
-            <thead>
-              <tr>
-                <SepaSortHeader field="ticker" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="left">
-                  銘柄
-                </SepaSortHeader>
-                <SepaSortHeader field="current_price" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
-                  株価
-                </SepaSortHeader>
-                <SepaSortHeader field="pivot_price" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
-                  ピボット
-                </SepaSortHeader>
-                <SepaSortHeader field="pivot_distance_pct" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
-                  接近度
-                </SepaSortHeader>
-                <SepaSortHeader field="atr_contraction_ratio" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
-                  ATR収縮
-                </SepaSortHeader>
-                <SepaSortHeader field="volume_dryup_ratio" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
-                  出来高枯渇
-                </SepaSortHeader>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-                    読み込み中...
-                  </td>
-                </tr>
-              ) : candidates.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-                    候補が見つかりませんでした。
-                  </td>
-                </tr>
-              ) : (
-                candidates.map((s: SepaStockRecord) => {
-                  const isSelected = selectedTicker === s.ticker;
-                  const isTier1 = Boolean(
-                    s.is_trend_template_pass &&
-                    s.sales_yoy_pct != null && s.sales_yoy_pct >= 10.0 &&
-                    ((s.eps_yoy_pct != null && s.eps_yoy_pct >= 20.0) || s.growth_status === 'TURNAROUND')
-                  );
+          {(() => {
+            const isPullback25 = mode === 'stage2_pullback_25';
+            const isPullback50 = mode === 'stage2_pullback_50';
+            const isPullback = isPullback25 || isPullback50;
 
-                  return (
-                    <tr
-                      key={s.ticker}
-                      onClick={() => setSelectedTicker(s.ticker)}
-                      className={isSelected ? 'selected' : ''}
-                    >
-                      <td>
-                        <div style={{ fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                            <span>{s.name}</span>
-                            {isTier1 && (
-                              <span className="sepa-badge-tier1" style={{ fontSize: '0.6rem', padding: '0.08rem 0.3rem' }}>
-                                Tier 1
-                              </span>
-                            )}
-                          </div>
-                          <Tier2ScoreBadges stock={s} compact />
-                        </div>
-                        {(() => {
-                          const gics = s.gics_sub_industry_id ? GICS_DICTIONARY[s.gics_sub_industry_id] : null;
-                          const tooltip = gics 
-                            ? `GICS: ${gics.sector_name} > ${gics.industry_name} > ${gics.sub_industry_name}\n(東証33業種: ${s.industry})` 
-                            : `東証33業種: ${s.industry}`;
-                          return (
-                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.15rem' }} title={tooltip}>
-                              <span style={{ color: gics ? '#38bdf8' : '#94a3b8', fontWeight: gics ? 500 : 400 }}>
-                                {gics ? gics.sub_industry_name : s.industry}
-                              </span>
-                              <span style={{ color: '#64748b' }}> | RS {s.rs_rating}</span>
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
-                        {s.current_price.toLocaleString()}円
-                      </td>
-                      <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#fbbf24', fontWeight: 600 }}>
-                        {s.pivot_price ? `${s.pivot_price.toLocaleString()}円` : '---'}
-                      </td>
-                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>
-                        {s.pivot_distance_pct != null ? (
-                          <span
-                            style={{
-                              color: s.pivot_distance_pct >= 0 && s.pivot_distance_pct <= 3 ? '#34d399' : '#fbbf24',
-                              fontWeight: s.pivot_distance_pct >= 0 && s.pivot_distance_pct <= 3 ? 700 : 500
-                            }}
-                          >
-                            {s.pivot_distance_pct > 0 ? `+${s.pivot_distance_pct.toFixed(1)}%` : `${s.pivot_distance_pct.toFixed(1)}%`}
-                          </span>
-                        ) : (
-                          '---'
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        {s.is_volatility_contracted ? (
-                          <span className="sepa-badge-pass">
-                            収縮 ({Number(s.atr_contraction_ratio).toFixed(2)})
-                          </span>
-                        ) : (
-                          <span style={{ color: '#64748b', fontSize: '0.7rem' }}>{s.atr_contraction_ratio ? s.atr_contraction_ratio.toFixed(2) : '---'}</span>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        {s.is_volume_dryup ? (
-                          <span style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.2)', border: '1px solid rgba(99, 102, 241, 0.4)', color: '#818cf8', fontWeight: 600 }}>
-                            枯渇 (VDU)
-                          </span>
-                        ) : (
-                          <span style={{ color: '#64748b', fontSize: '0.7rem' }}>{s.volume_dryup_ratio ? s.volume_dryup_ratio.toFixed(2) : '---'}</span>
-                        )}
+            return (
+              <table className="sepa-table">
+                <thead>
+                  <tr>
+                    <SepaSortHeader field="ticker" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="left">
+                      銘柄
+                    </SepaSortHeader>
+                    <SepaSortHeader field="current_price" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                      株価
+                    </SepaSortHeader>
+                    {isPullback ? (
+                      <>
+                        <SepaSortHeader field={isPullback25 ? "dist_sma25_pct" : "dist_sma50_pct"} currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                          {isPullback25 ? '25日線乖離' : '50日線乖離'}
+                        </SepaSortHeader>
+                        <SepaSortHeader field="pullback_depth_pct" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                          押し幅
+                        </SepaSortHeader>
+                        <SepaSortHeader field="min_vdu_ratio" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
+                          出来高枯渇比
+                        </SepaSortHeader>
+                        <SepaSortHeader field="rs_rating" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
+                          RS
+                        </SepaSortHeader>
+                      </>
+                    ) : (
+                      <>
+                        <SepaSortHeader field="pivot_price" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                          ピボット
+                        </SepaSortHeader>
+                        <SepaSortHeader field="pivot_distance_pct" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                          接近度
+                        </SepaSortHeader>
+                        <SepaSortHeader field="atr_contraction_ratio" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
+                          ATR収縮
+                        </SepaSortHeader>
+                        <SepaSortHeader field="volume_dryup_ratio" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
+                          出来高枯渇
+                        </SepaSortHeader>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                        読み込み中...
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  ) : candidates.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                        候補が見つかりませんでした。
+                      </td>
+                    </tr>
+                  ) : (
+                    candidates.map((s: SepaStockRecord) => {
+                      const isSelected = selectedTicker === s.ticker;
+                      const isTier1 = Boolean(
+                        s.is_trend_template_pass &&
+                        s.sales_yoy_pct != null && s.sales_yoy_pct >= 10.0 &&
+                        ((s.eps_yoy_pct != null && s.eps_yoy_pct >= 20.0) || s.growth_status === 'TURNAROUND')
+                      );
+
+                      return (
+                        <tr
+                          key={s.ticker}
+                          onClick={() => setSelectedTicker(s.ticker)}
+                          className={isSelected ? 'selected' : ''}
+                        >
+                          <td>
+                            <div style={{ fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                <span>{s.name}</span>
+                                {isTier1 && (
+                                  <span className="sepa-badge-tier1" style={{ fontSize: '0.6rem', padding: '0.08rem 0.3rem' }}>
+                                    Tier 1
+                                  </span>
+                                )}
+                              </div>
+                              <Tier2ScoreBadges stock={s} compact />
+                            </div>
+                            {(() => {
+                              const gics = s.gics_sub_industry_id ? GICS_DICTIONARY[s.gics_sub_industry_id] : null;
+                              const tooltip = gics 
+                                ? `GICS: ${gics.sector_name} > ${gics.industry_name} > ${gics.sub_industry_name}\n(東証33業種: ${s.industry})` 
+                                : `東証33業種: ${s.industry}`;
+                              return (
+                                <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.15rem' }} title={tooltip}>
+                                  <span style={{ color: gics ? '#38bdf8' : '#94a3b8', fontWeight: gics ? 500 : 400 }}>
+                                    {gics ? gics.sub_industry_name : s.industry}
+                                  </span>
+                                  <span style={{ color: '#64748b' }}> | RS {s.rs_rating}</span>
+                                </div>
+                              );
+                            })()}
+                          </td>
+                          <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
+                            {s.current_price.toLocaleString()}円
+                          </td>
+
+                          {isPullback ? (
+                            <>
+                              <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
+                                {(() => {
+                                  const dist = isPullback25 ? s.dist_sma25_pct : s.dist_sma50_pct;
+                                  const sma = isPullback25 ? s.sma_25 : s.sma_50;
+                                  if (dist == null) return '---';
+                                  const color = dist <= 0 ? '#34d399' : '#38bdf8';
+                                  return (
+                                    <div>
+                                      <span style={{ color, fontWeight: 700 }}>
+                                        {dist > 0 ? `+${dist.toFixed(1)}%` : `${dist.toFixed(1)}%`}
+                                      </span>
+                                      <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                                        {sma ? `${sma.toLocaleString()}円` : ''}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </td>
+                              <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#fbbf24', fontWeight: 600 }}>
+                                {s.pullback_depth_pct != null ? `${s.pullback_depth_pct.toFixed(1)}%` : '---'}
+                              </td>
+                              <td style={{ textAlign: 'center' }}>
+                                {s.min_vdu_ratio != null ? (
+                                  <span style={{
+                                    padding: '0.15rem 0.4rem',
+                                    fontSize: '0.65rem',
+                                    borderRadius: '4px',
+                                    background: s.min_vdu_ratio <= 0.75 ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.05)',
+                                    border: s.min_vdu_ratio <= 0.75 ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid rgba(255,255,255,0.1)',
+                                    color: s.min_vdu_ratio <= 0.75 ? '#818cf8' : '#94a3b8',
+                                    fontWeight: 600
+                                  }}>
+                                    {(s.min_vdu_ratio * 100).toFixed(0)}%
+                                  </span>
+                                ) : (
+                                  '---'
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 700, color: (s.rs_rating ?? 0) >= 80 ? '#34d399' : '#818cf8' }}>
+                                {s.rs_rating ?? '---'}
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#fbbf24', fontWeight: 600 }}>
+                                {s.pivot_price ? `${s.pivot_price.toLocaleString()}円` : '---'}
+                              </td>
+                              <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                                {s.pivot_distance_pct != null ? (
+                                  <span
+                                    style={{
+                                      color: s.pivot_distance_pct >= 0 && s.pivot_distance_pct <= 3 ? '#34d399' : '#fbbf24',
+                                      fontWeight: s.pivot_distance_pct >= 0 && s.pivot_distance_pct <= 3 ? 700 : 500
+                                    }}
+                                  >
+                                    {s.pivot_distance_pct > 0 ? `+${s.pivot_distance_pct.toFixed(1)}%` : `${s.pivot_distance_pct.toFixed(1)}%`}
+                                  </span>
+                                ) : (
+                                  '---'
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'center' }}>
+                                {s.is_volatility_contracted ? (
+                                  <span className="sepa-badge-pass">
+                                    収縮 ({Number(s.atr_contraction_ratio).toFixed(2)})
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#64748b', fontSize: '0.7rem' }}>{s.atr_contraction_ratio ? s.atr_contraction_ratio.toFixed(2) : '---'}</span>
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'center' }}>
+                                {s.is_volume_dryup ? (
+                                  <span style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.2)', border: '1px solid rgba(99, 102, 241, 0.4)', color: '#818cf8', fontWeight: 600 }}>
+                                    枯渇 (VDU)
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#64748b', fontSize: '0.7rem' }}>{s.volume_dryup_ratio ? s.volume_dryup_ratio.toFixed(2) : '---'}</span>
+                                )}
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            );
+          })()}
         </div>
 
         {/* 右: 目視チャートプレビュー */}
@@ -252,12 +371,28 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                     })()}
                   </h3>
                   <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                    {diagnostics.metrics.base_high && diagnostics.metrics.base_high !== diagnostics.metrics.pivot_price && (
-                      <>ベース高値: <span style={{ color: '#f97316', fontWeight: 600 }}>{diagnostics.metrics.base_high.toLocaleString()}円</span> | </>
+                    {mode === 'stage2_pullback_25' || mode === 'stage2_pullback_50' ? (
+                      <>
+                        20日高値: <span style={{ color: '#f97316', fontWeight: 600 }}>{diagnostics.metrics.swing_high_20d ? `${diagnostics.metrics.swing_high_20d.toLocaleString()}円` : '---'}</span> | 
+                        押し幅: <span style={{ color: '#fbbf24', fontWeight: 600 }}>{diagnostics.metrics.pullback_depth_pct != null ? `${diagnostics.metrics.pullback_depth_pct.toFixed(1)}%` : '---'}</span> | 
+                        {mode === 'stage2_pullback_25' ? (
+                          <>25日SMA: <span style={{ color: '#a855f7', fontWeight: 700 }}>{diagnostics.metrics.sma_25 ? `${diagnostics.metrics.sma_25.toLocaleString()}円` : '---'} ({diagnostics.metrics.dist_sma25_pct != null ? `${diagnostics.metrics.dist_sma25_pct > 0 ? '+' : ''}${diagnostics.metrics.dist_sma25_pct.toFixed(1)}%` : '---'})</span> | </>
+                        ) : (
+                          <>50日SMA: <span style={{ color: '#06b6d4', fontWeight: 700 }}>{diagnostics.metrics.sma_50 ? `${diagnostics.metrics.sma_50.toLocaleString()}円` : '---'} ({diagnostics.metrics.dist_sma50_pct != null ? `${diagnostics.metrics.dist_sma50_pct > 0 ? '+' : ''}${diagnostics.metrics.dist_sma50_pct.toFixed(1)}%` : '---'})</span> | </>
+                        )}
+                        枯渇比: <span style={{ color: '#818cf8', fontWeight: 600 }}>{diagnostics.metrics.min_vdu_ratio != null ? `${(diagnostics.metrics.min_vdu_ratio * 100).toFixed(0)}%` : '---'}</span> | 
+                        RS: <span style={{ color: '#34d399', fontWeight: 700 }}>{diagnostics.metrics.rs_rating}</span>
+                      </>
+                    ) : (
+                      <>
+                        {diagnostics.metrics.base_high && diagnostics.metrics.base_high !== diagnostics.metrics.pivot_price && (
+                          <>ベース高値: <span style={{ color: '#f97316', fontWeight: 600 }}>{diagnostics.metrics.base_high.toLocaleString()}円</span> | </>
+                        )}
+                        真のピボット: <span style={{ color: '#fbbf24', fontWeight: 700 }}>{diagnostics.metrics.pivot_price?.toLocaleString()}円</span> | 
+                        乖離: <span style={{ color: '#fff' }}>{diagnostics.metrics.pivot_distance_pct?.toFixed(1)}%</span> | 
+                        RS: <span style={{ color: '#818cf8', fontWeight: 700 }}>{diagnostics.metrics.rs_rating}</span>
+                      </>
                     )}
-                    真のピボット: <span style={{ color: '#fbbf24', fontWeight: 700 }}>{diagnostics.metrics.pivot_price?.toLocaleString()}円</span> | 
-                    乖離: <span style={{ color: '#fff' }}>{diagnostics.metrics.pivot_distance_pct?.toFixed(1)}%</span> | 
-                    RS: <span style={{ color: '#818cf8', fontWeight: 700 }}>{diagnostics.metrics.rs_rating}</span>
                   </div>
                 </div>
                 <button

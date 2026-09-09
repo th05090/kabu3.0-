@@ -22,6 +22,7 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
   const [accelerating, setAccelerating] = useState<boolean>(false);
   const [marginExpansion, setMarginExpansion] = useState<boolean>(false);
   const [sweetSpotCap, setSweetSpotCap] = useState<boolean>(false);
+  const [midLargeCap, setMidLargeCap] = useState<boolean>(false);
   const [minLiquidity, setMinLiquidity] = useState<boolean>(false);
   const [roe15, setRoe15] = useState<boolean>(false);
   const [annualGrowth, setAnnualGrowth] = useState<boolean>(false);
@@ -38,6 +39,7 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
     accelerating,
     margin_expansion: marginExpansion,
     sweet_spot_cap: sweetSpotCap,
+    mid_large_cap: midLargeCap,
     min_liquidity: minLiquidity,
     min_roe: roe15 ? 15 : null,
     annual_growth: annualGrowth,
@@ -68,6 +70,7 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
     setAccelerating(false);
     setMarginExpansion(false);
     setSweetSpotCap(false);
+    setMidLargeCap(false);
     setMinLiquidity(false);
     setRoe15(false);
     setAnnualGrowth(false);
@@ -92,6 +95,8 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
         setMarginExpansion={(b) => { setMarginExpansion(b); setPage(1); }}
         sweetSpotCap={sweetSpotCap}
         setSweetSpotCap={(b) => { setSweetSpotCap(b); setPage(1); }}
+        midLargeCap={midLargeCap}
+        setMidLargeCap={(b) => { setMidLargeCap(b); setPage(1); }}
         minLiquidity={minLiquidity}
         setMinLiquidity={(b) => { setMinLiquidity(b); setPage(1); }}
         roe15={roe15}

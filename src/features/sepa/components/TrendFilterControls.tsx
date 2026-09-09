@@ -14,6 +14,8 @@ interface TrendFilterControlsProps {
   setMarginExpansion: (b: boolean) => void;
   sweetSpotCap: boolean;
   setSweetSpotCap: (b: boolean) => void;
+  midLargeCap: boolean;
+  setMidLargeCap: (b: boolean) => void;
   minLiquidity: boolean;
   setMinLiquidity: (b: boolean) => void;
   roe15: boolean;
@@ -38,6 +40,8 @@ export function TrendFilterControls({
   setMarginExpansion,
   sweetSpotCap,
   setSweetSpotCap,
+  midLargeCap,
+  setMidLargeCap,
   minLiquidity,
   setMinLiquidity,
   roe15,
@@ -164,10 +168,26 @@ export function TrendFilterControls({
 
         {/* 時価総額 100〜1000億 */}
         <button
-          onClick={() => setSweetSpotCap(!sweetSpotCap)}
+          onClick={() => {
+            const next = !sweetSpotCap;
+            setSweetSpotCap(next);
+            if (next) setMidLargeCap(false);
+          }}
           className={`sepa-chip ${sweetSpotCap ? 'active-amber' : ''}`}
         >
           時価総額 100〜1,000億
+        </button>
+
+        {/* 時価総額 300〜3000億 */}
+        <button
+          onClick={() => {
+            const next = !midLargeCap;
+            setMidLargeCap(next);
+            if (next) setSweetSpotCap(false);
+          }}
+          className={`sepa-chip ${midLargeCap ? 'active-indigo' : ''}`}
+        >
+          時価総額 300〜3,000億
         </button>
 
         {/* 売買代金 1億以上 */}

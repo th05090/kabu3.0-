@@ -105,13 +105,19 @@ graph TD
 #### 2.5.1 画面タブ機能概要
 - **トレンドテンプレートタブ (`TrendTemplateTab`)**:
   - 8つのステージ2条件を満たした銘柄群を一覧表示。
-  - ファンダメンタルフィルター（EPS加速、売上加速、マージン拡大、黒字転換）による動的絞り込み。
+  - ファンダメンタルフィルター（EPS加速、売上加速、マージン拡大、黒字転換、ROE 15%↑、3年連続増益、時価総額100〜1,000億、時価総額300〜3,000億）による動的絞り込み。
   - RS（レラティブストレングス）ランキング順、または「掲載日（Stage2突入日）」によるソートが可能。リスト復帰時にも最新の突入日を表示。
 - **VCP・セットアップ候補タブ (`VcpCandidatesTab`)**:
-  - トレンドテンプレート合格銘柄の中から、ベース形成（20〜65日）およびピボット形成（直近2〜15日）を経たブレイクアウト直前・直後の銘柄を抽出。
-  - 上部に5つのプリセット絞り込み（「ピボット接近」「ブレイク直後」「出来高枯渇」「Stage2 + 全ファンダ」「全VCP候補」）を搭載。
+  - トレンドテンプレート合格銘柄の中から、ベース形成（20〜65日）およびピボット形成（直近2〜15日）を経たブレイクアウト直前・直後の銘柄、および25日/50日SMAへのプルバック（押し目）銘柄を抽出。
+  - 上部に4つのモード切替チップを搭載：
+    - `[ Stage2 + コア成長 (Tier 1) ]`: エメラルド (`#10b981`)
+    - `[ ★ Stage2 + 25日押し目 ]`: パープル (`#a855f7`, チャートの25SMA色に一致、強モメンタム浅押し)
+    - `[ Stage2 + 50日押し目 ]`: シアン (`#06b6d4`, 機関投資家サポート押し)
+    - `[ 全VCP候補 ]`: アンバー (`#f59e0b`, セットアップ全件)
+  - オプショントグル（「株式のみ」「時価総額 100〜1,000億」「時価総額 300〜3,000億」「売買代金 >= 1億」）を独立オーバーレイ可能。
   - 左ペイン（候補銘柄一覧）と右ペイン（クイック詳細プレビュー）の2ペイン構成。
-  - チャート上にはベース期間高値（ベースレジスタンス：橙色点線）と真のピボット（ピボットライン：金色破線）を分離表示。
+  - 押し目モード選択時は、左テーブルが自動的に「25日線/50日線乖離・押し幅%・出来高枯渇比・RS」へ切り替わり、押し目深度とサポート状況を即座に確認可能。
+  - チャート上にはベース期間高値（ベースレジスタンス：橙色点線）と真のピボット（ピボットライン：金色破線）、および25日SMA（紫）・50日SMA（緑）・150日SMA（青）・200日SMA（赤）を表示。
 - **個別銘柄SEPA診断タブ (`DiagnosticsTab`)**:
   - 銘柄コード入力により、当該銘柄のSEPA適合状況（Stage2の8条件、ファンダメンタル4項目、VCP健全性ガード）を一目で判定する個別詳細診断ビュー。
   - リスクリワード計算パネル（ピボット基準の損切り価格、目標価格、R:R比率）を搭載。
@@ -122,12 +128,13 @@ src/app/sepa/page.tsx
 └── SepaDashboard (.sepa-page-wrapper: 縦スクロールレイアウト)
     ├── タブ切替ヘッダー ('trend' | 'vcp' | 'diagnostics')
     ├── TrendTemplateTab
-    │   └── TrendFilterControls (EPS/売上/マージン/黒字転換トグル)
+    │   └── TrendFilterControls (EPS/売上/マージン/黒字転換/時価総額トグル)
     ├── VcpCandidatesTab (左右2ペインスプリット)
-    │   ├── 左ペイン: VCP銘柄リストテーブル
+    │   ├── 上部: 4モード切替チップ & オプショントグル (100〜1,000億, 300〜3,000億, 売買代金1億)
+    │   ├── 左ペイン: VCP / 押し目 銘柄リストテーブル (モード別動的ヘッダー)
     │   └── 右ペイン: 銘柄クイック詳細プレビュー
     │       ├── ChecklistBadges (8条件・健全性バッジ)
-    │       └── SepaPriceChart (Base High / True Pivot / SMA表示)
+    │       └── SepaPriceChart (Base High / True Pivot / 25, 50, 150, 200 SMA表示)
     └── DiagnosticsTab (銘柄コード直接入力診断)
         ├── ChecklistBadges
         ├── SepaPriceChart
@@ -409,6 +416,10 @@ CREATE TABLE IF NOT EXISTS sepa_metrics (
   sma_50 REAL,
   sma_150 REAL,
   sma_200 REAL,
+  sma_25 REAL,
+  dist_sma25_pct REAL,
+  dist_sma50_pct REAL,
+  is_trend_structural_pass INTEGER,
   is_above_sma_50 INTEGER,
   is_above_sma_150 INTEGER,
   is_above_sma_200 INTEGER,
@@ -459,6 +470,14 @@ CREATE TABLE IF NOT EXISTS sepa_metrics (
   volume_50d_avg REAL,
   volume_dryup_ratio REAL,
   is_volume_dryup INTEGER,
+  swing_high_20d REAL,
+  pullback_depth_pct REAL,
+  max_dd_60d REAL,
+  min_volume_5d REAL,
+  min_vdu_ratio REAL,
+  has_distribution_day INTEGER,
+  is_pullback_25 INTEGER,
+  is_pullback_50 INTEGER,
   ir_catalyst_count INTEGER,
   latest_ir_title TEXT,
   latest_ir_date TEXT,
@@ -685,6 +704,7 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
     - `min_roe`: ROE下限（%）（例: `15.0`。純資産ゼロ以下の債務超過はNULL判定で除外）
     - `annual_growth`: `'true'` の場合 3期連続年間EPSプラス成長 (`has_3y_annual_growth = 1`)
     - `sweet_spot_cap`: `'true'` の場合 時価総額100〜1,000億円 (`market_cap >= 100 AND market_cap <= 1000`)
+    - `mid_large_cap`: `'true'` の場合 時価総額300〜3,000億円 (`market_cap >= 300 AND market_cap <= 3000`)
     - `min_liquidity`: `'true'` の場合 5日平均売買代金1億円以上 (`avg_trading_value_5d >= 1.0`)
     - `search`: ティッカーまたは銘柄名の部分一致検索
     - `sort_by`: ソート対象カラム名 (`ticker`, `current_price`, `rs_rating`, `passed_conditions_count`, `stage2_entry_date`, `sales_yoy_pct`, `eps_yoy_pct`, `funda_score`, `market_cap`)
@@ -704,19 +724,25 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
     ```
 
 - **`GET /api/sepa/vcp-candidates`**
-  - **用途**: VCP収縮およびピボットブレイクアウト候補銘柄一覧を取得します（`is_trend_template_pass = 1` を前提）。
+  - **用途**: VCP収縮、ピボットブレイクアウト候補、および25日/50日SMAプルバック（押し目）銘柄一覧を取得します。
   - **クエリパラメータ**:
     - `mode`: 
-      - `'strict_funda'`: Stage 2 + コア成長 Tier 1 (`rs_rating >= 80` かつ 売上+10%↑, EPS+20%↑/黒字転換, デフォルト)
-      - `'all'`: 全VCP候補 `(is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)`
-    - `sweet_spot_cap`: `'true'` の場合 時価総額100〜1,000億円のオーバーレイ
-    - `min_liquidity`: `'true'` の場合 5日平均売買代金1億円以上のオーバーレイ
+      - `'strict_funda'`: Stage 2 + コア成長 Tier 1 (`is_trend_template_pass = 1 AND rs_rating >= 80` かつ 売上+10%↑, EPS+20%↑/黒字転換, デフォルト)
+      - `'stage2_pullback_25'`: ★ 25日SMA押し目モード (`is_pullback_25 = 1 AND rs_rating >= 75`。構造的Stage 2 + 高値調整 -3%〜-12% + 25日線乖離 -1.5%〜+3.5% + 出来高枯渇比 <= 0.75 + 大商い下落日なし + 60日最大DD >= -30%)
+      - `'stage2_pullback_50'`: 50日SMA押し目モード (`is_pullback_50 = 1 AND rs_rating >= 75`。構造的Stage 2 + 高値調整 -5%〜-20% + 50日線乖離 -2.0%〜+3.5% + 出来高枯渇比 <= 0.75 + 大商い下落日なし + 60日最大DD >= -30%)
+      - `'all'`: 全VCP候補 `is_trend_template_pass = 1 AND (is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)`
+    - `sweet_spot_cap`: `'true'` の場合 時価総額100〜1,000億円のオーバーレイ (`market_cap >= 100 AND market_cap <= 1000`)
+    - `mid_large_cap`: `'true'` の場合 時価総額300〜3,000億円のオーバーレイ (`market_cap >= 300 AND market_cap <= 3000`)
+    - `min_liquidity`: `'true'` の場合 5日平均売買代金1億円以上のオーバーレイ (`avg_trading_value_5d >= 1.0`)
     - `exclude_etf`: 投信・ETF・ETN・REIT等の非事業会社を除外 (`'true'` または未指定の場合 `is_operating_company = 1`、`'false'` で全銘柄)
-    - `sort_by`: ソート対象カラム名 (`ticker`, `current_price`, `pivot_price`, `pivot_distance_pct`, `atr_contraction_ratio`, `volume_dryup_ratio`, `rs_rating`, `funda_score`)
+    - `sort_by`: ソート対象カラム名 (`ticker`, `current_price`, `pivot_price`, `pivot_distance_pct`, `dist_sma25_pct`, `dist_sma50_pct`, `pullback_depth_pct`, `min_vdu_ratio`, `atr_contraction_ratio`, `volume_dryup_ratio`, `rs_rating`, `market_cap`, `funda_score`)
     - `order`: 昇順/降順 (`'asc'` または `'desc'`, デフォルト `'desc'`)
     - `page`: ページ番号 (デフォルト `1`)
     - `limit`: 1ページあたりの件数 (デフォルト `50`, 最大 `100`)
-  - **ソート順**: 未指定時は `ORDER BY is_pivot_breakout DESC, is_near_pivot DESC, pivot_distance_pct DESC, rs_rating DESC`
+  - **ソート順**: 
+    - `stage2_pullback_25`: 未指定時は `ORDER BY rs_rating DESC, dist_sma25_pct ASC`
+    - `stage2_pullback_50`: 未指定時は `ORDER BY rs_rating DESC, dist_sma50_pct ASC`
+    - その他通常時: 未指定時は `ORDER BY is_pivot_breakout DESC, is_near_pivot DESC, pivot_distance_pct DESC, rs_rating DESC`
   - **レスポンス形式**:
     ```json
     {
@@ -859,6 +885,29 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
 7. **セットアップ・ブレイクアウト判定**:
    - ピボット接近（セットアップ圏内: `is_near_pivot`）: 健全ハンドル（$pivot \ge base\_high \times 0.85$）かつ 当日終値がピボット価格の $-5.0\% \sim 0.0\%$ 圏内。
    - ピボットブレイクアウト（`is_pivot_breakout`）: 健全ハンドル かつ 当日終値がピボット価格を上放れ（$0.0\% \sim +3.0\%$）かつ 当日出来高が50日平均の1.5倍以上（$Volume_{today} \ge Vol_{50d\_avg} \times 1.5$）。
+
+#### 7.2.5 ミネルヴィニ流プルバック（押し目）物理計算エンジン (`vcp_screener.ts`)
+ブレイクアウト後の初押し、または強力な上昇トレンド中の移動平均線サポート（25日SMAおよび50日SMA）からの反発局面を機械的かつ厳密に検知するアルゴリズムです。
+
+1. **構造的Stage 2（`is_trend_structural_pass`）**:
+   - プルバック中（特に50日線テスト時）は、終値が一時的に50日線をわずかに下回る押し目（$-2.0\% \sim 0.0\%$）があり得るため、通常の `Close > SMA50` 必須縛りを外し、「SMA50 > SMA150 > SMA200 かつ 200日線スロープ $> 0$」をベーストレンド前提とする。
+2. **直近20日スイング高値（`swing_high_20d`）と健全な押し幅（`pullback_depth_pct`）**:
+   - 天井圏での単なる横ばい（偽押し目）を排除するため、直近20営業日高値が移動平均線から最低 $+3.5\%$ 以上上に乖離していることを必須とする。
+   - **25日SMA押し目**: スイング高値からの下落率が $-3.0\% \sim -12.0\%$（モメンタム維持の浅い押し）。
+   - **50日SMA押し目**: スイング高値からの下落率が $-5.0\% \sim -20.0\%$（機関投資家防衛ラインへの本格調整）。
+3. **サポート移動平均線との乖離率（`dist_sma25_pct`, `dist_sma50_pct`）**:
+   - **25日SMAサポート**: 当日終値が25日SMAの $-1.5\% \sim +3.5\%$ 圏内。
+   - **50日SMAサポート**: 当日終値が50日SMAの $-2.0\% \sim +3.5\%$ 圏内。
+4. **出来高枯渇比（`min_vdu_ratio`）**:
+   - 直近5営業日間の最小出来高 / 過去50日平均出来高 が $\le 0.75$（直近5日間に一度でも出来高が50日平均の75%以下に干上がった「出来高枯渇＝売り玉出尽くし」が発生）。
+5. **大商い下落日ディストリビューション排除ガード（`has_distribution_day`）**:
+   - 直近5日間に、前日比マイナスかつ出来高が50日平均の1.5倍以上の大陰線売り抜け日が存在する場合は即座に除外（`has_distribution_day = 0` 必須）。
+6. **過去60営業日最大ドローダウン（DD）ガード（`max_dd_60d`）**:
+   - 過去60営業日（約3ヶ月）以内の最高値から最安値への最大下落率が $-30.0\%$ を超えて売られた銘柄（チャート崩壊・大暴落銘柄）を排除（`max_dd_60d >= -30.0%`）。
+7. **長期線急落ブレイクダウン排除ガード**:
+   - 直近20営業日以内に一度でも終値が200日SMAを $5\%$ 以上割り込んだ（$Close < SMA200 \times 0.95$）ことがある銘柄を排除。
+8. **RSレーティング**:
+   - 市場上位 $25\%$ 以内の強さを持つ銘柄に限定（`rs_rating >= 75`）。
 
 ### 7.3 東証33業種 -> GICS ハード制約マッピング (`TSE_TO_GICS_MAPPING`)
 ハルシネーションによる大分類の誤りを防ぐため、`src/lib/anomaly_detector.ts` 等で定義された `TSE_TO_GICS_MAPPING` を利用します。

@@ -16,9 +16,12 @@ export type QuarterlyGrowthStatus =
 // トレンドテンプレート指標
 export interface SepaTrendMetrics {
   current_price: number;
+  sma_25: number | null;
   sma_50: number | null;
   sma_150: number | null;
   sma_200: number | null;
+  dist_sma25_pct: number | null;
+  dist_sma50_pct: number | null;
   is_above_sma_50: boolean;
   is_above_sma_150: boolean;
   is_above_sma_200: boolean;
@@ -33,6 +36,7 @@ export interface SepaTrendMetrics {
   distance_to_high_52w_pct: number | null;   // 高値から何%圏内か (<= 25%以内)
   is_ipo: boolean;                           // 上場250日未満
   is_trend_template_pass: boolean;           // 必須条件クリア (IPOバイパス対応)
+  is_trend_structural_pass: boolean;         // 構造的Stage 2 (Close>SMA50縛りを外し、アンダーシュート許容)
   passed_conditions_count: number;           // 8条件中クリア数
   stage2_entry_date: string | null;          // 直近でStage 2に突入・再合格した日付
 }
@@ -84,8 +88,25 @@ export interface SepaVcpMetrics {
   is_volume_dryup: boolean;
 }
 
+// ミネルヴィニ流プルバック（押し目）指標
+export interface SepaPullbackMetrics {
+  swing_high_20d: number | null;     // 直近20営業日のスイング高値
+  pullback_depth_pct: number | null; // 直近スイング高値からの下落率 (負のパーセント)
+  max_dd_60d: number | null;         // 過去60営業日の最大ドローダウン (最高値→最安値の下落率)
+  min_volume_5d: number | null;      // 直近5営業日の最小出来高
+  min_vdu_ratio: number | null;      // min_volume_5d / volume_50d_avg (出来高枯渇比)
+  has_distribution_day: boolean;     // 直近5営業日に大商い下落日 (出来高>=1.5倍) があるか
+  is_pullback_25: boolean;           // 25日SMA押し目合格フラグ (強モメンタム浅押し)
+  is_pullback_50: boolean;           // 50日SMA押し目合格フラグ (機関投資家本格押し)
+}
+
 // SEPA 総合銘柄レコード (キャッシュテーブル & API返却用)
-export interface SepaStockRecord extends SepaTrendMetrics, SepaRsMetrics, SepaFundamentalsMetrics, SepaVcpMetrics {
+export interface SepaStockRecord
+  extends SepaTrendMetrics,
+    SepaRsMetrics,
+    SepaFundamentalsMetrics,
+    SepaVcpMetrics,
+    SepaPullbackMetrics {
   ticker: string;
   name: string;
   market: string;
