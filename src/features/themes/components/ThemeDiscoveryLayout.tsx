@@ -5,9 +5,10 @@ import { ThemeSearchTab } from './ThemeSearchTab';
 import { CustomThemesTab } from './CustomThemesTab';
 import { DataCleansingTab } from './DataCleansingTab';
 import { IRNewsTab } from './IRNewsTab';
+import { SectorInflowTab } from './SectorInflowTab';
 
 export function ThemeDiscoveryLayout() {
-  const [activeTab, setActiveTab] = useState<'search' | 'custom' | 'cleansing' | 'irnews'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'custom' | 'cleansing' | 'irnews' | 'sector_inflow'>('search');
 
   return (
     <div className="theme-layout">
@@ -21,6 +22,12 @@ export function ThemeDiscoveryLayout() {
           onClick={() => setActiveTab('search')}
         >
           テーマ検索
+        </button>
+        <button
+          className={`theme-tab-btn ${activeTab === 'sector_inflow' ? 'active' : ''}`}
+          onClick={() => setActiveTab('sector_inflow')}
+        >
+          GICSセクター流入
         </button>
         <button
           className={`theme-tab-btn ${activeTab === 'custom' ? 'active' : ''}`}
@@ -44,6 +51,7 @@ export function ThemeDiscoveryLayout() {
 
       <div className="theme-content">
         {activeTab === 'search' && <ThemeSearchTab />}
+        {activeTab === 'sector_inflow' && <SectorInflowTab />}
         {activeTab === 'custom' && <CustomThemesTab />}
         {activeTab === 'cleansing' && <DataCleansingTab />}
         {activeTab === 'irnews' && <IRNewsTab />}
@@ -51,3 +59,4 @@ export function ThemeDiscoveryLayout() {
     </div>
   );
 }
+

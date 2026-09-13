@@ -45,6 +45,7 @@ export function SepaPriceChart({ quotes, pivotPrice, baseHigh }: SepaPriceChartP
       timeScale: {
         borderColor: 'rgba(255, 255, 255, 0.1)',
         timeVisible: true,
+        rightOffset: 3,
       },
       width: containerRef.current.clientWidth,
       height: 380,
@@ -167,7 +168,17 @@ export function SepaPriceChart({ quotes, pivotPrice, baseHigh }: SepaPriceChartP
       }))
     );
 
-    chart.timeScale().fitContent();
+    // 初期表示範囲を直近1ヶ月（約25営業日）にズーム（スクロール/ピンチで過去データも閲覧可能）
+    if (sorted.length > 22) {
+      const fromDate = sorted[Math.max(0, sorted.length - 25)].date;
+      const toDate = sorted[sorted.length - 1].date;
+      chart.timeScale().setVisibleRange({
+        from: fromDate,
+        to: toDate,
+      });
+    } else {
+      chart.timeScale().fitContent();
+    }
 
     const handleResize = () => {
       if (containerRef.current) {
