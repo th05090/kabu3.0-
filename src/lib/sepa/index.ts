@@ -120,7 +120,12 @@ export async function ensureSepaTable() {
       ir_catalyst_count INTEGER,
       latest_ir_title TEXT,
       latest_ir_date TEXT,
-      gics_sub_industry_id TEXT
+      gics_sub_industry_id TEXT,
+      has_breakout_prior INTEGER DEFAULT 0,
+      days_since_breakout INTEGER,
+      breakout_date TEXT,
+      breakout_price REAL,
+      pullback_from_breakout_high_pct REAL
     )
   `);
 
@@ -135,6 +140,26 @@ export async function ensureSepaTable() {
       const hasGicsCol = tableInfo.rows.some(r => r.name === 'gics_sub_industry_id');
       if (!hasGicsCol) {
         await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN gics_sub_industry_id TEXT`);
+      }
+      const hasBreakoutPrior = tableInfo.rows.some(r => r.name === 'has_breakout_prior');
+      if (!hasBreakoutPrior) {
+        await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN has_breakout_prior INTEGER DEFAULT 0`);
+      }
+      const hasDaysSinceBo = tableInfo.rows.some(r => r.name === 'days_since_breakout');
+      if (!hasDaysSinceBo) {
+        await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN days_since_breakout INTEGER`);
+      }
+      const hasBoDate = tableInfo.rows.some(r => r.name === 'breakout_date');
+      if (!hasBoDate) {
+        await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN breakout_date TEXT`);
+      }
+      const hasBoPrice = tableInfo.rows.some(r => r.name === 'breakout_price');
+      if (!hasBoPrice) {
+        await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN breakout_price REAL`);
+      }
+      const hasPullbackPct = tableInfo.rows.some(r => r.name === 'pullback_from_breakout_high_pct');
+      if (!hasPullbackPct) {
+        await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN pullback_from_breakout_high_pct REAL`);
       }
     }
   } catch (e) {
@@ -311,7 +336,7 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )`,
       args: [
         ticker, s.name, s.market, s.industry, isOp ? 1 : 0, quotes[0].date,
@@ -335,7 +360,12 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
         vcp.atr_10, vcp.atr_50, vcp.atr_contraction_ratio, vcp.is_volatility_contracted ? 1 : 0,
         vcp.volume_5d_avg, vcp.volume_50d_avg, vcp.volume_dryup_ratio, vcp.is_volume_dryup ? 1 : 0,
         ir?.cnt || 0, ir?.title || null, ir?.date || null,
-        s.gics_sub_industry_id || null
+        s.gics_sub_industry_id || null,
+        pb.has_breakout_prior ? 1 : 0,
+        pb.days_since_breakout,
+        pb.breakout_date,
+        pb.breakout_price,
+        pb.pullback_from_breakout_high_pct
       ]
     });
 

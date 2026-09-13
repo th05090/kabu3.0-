@@ -5,7 +5,7 @@ import { useSepaVcp, useSepaDiagnostics } from '../hooks/useSepa';
 import { SepaPriceChart } from './SepaPriceChart';
 import { SepaSortHeader } from './SepaSortHeader';
 import { Tier2ScoreBadges } from './Tier2ScoreBadges';
-import { Target, Activity, ExternalLink, CheckCircle2, Building2, Sparkles } from 'lucide-react';
+import { Target, Activity, ExternalLink, CheckCircle2, Building2, Sparkles, Rocket } from 'lucide-react';
 import { SepaStockRecord } from '../types/sepa';
 import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
@@ -84,7 +84,17 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
             Stage2 + 50日押し目
           </button>
 
-          {/* 4. 全VCP候補 (アンバー) */}
+          {/* 4. 🚀 ブレイク後押し目 (アンバー/新設) */}
+          <button
+            onClick={() => handleModeChange('breakout_pullback')}
+            className={`sepa-chip ${mode === 'breakout_pullback' ? 'active-amber' : ''}`}
+            title="過去3〜25営業日前に出来高急増でブレイクアウトし、現在25日線または50日線で健全な押し目を形成している銘柄 (RS>=75)"
+          >
+            <Rocket size={14} />
+            🚀 ブレイク後押し目
+          </button>
+
+          {/* 5. 全VCP候補 (アンバー) */}
           <button
             onClick={() => handleModeChange('all')}
             className={`sepa-chip ${mode === 'all' ? 'active-amber' : ''}`}
@@ -153,6 +163,7 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
           {(() => {
             const isPullback25 = mode === 'stage2_pullback_25';
             const isPullback50 = mode === 'stage2_pullback_50';
+            const isBreakoutPullback = mode === 'breakout_pullback';
             const isPullback = isPullback25 || isPullback50;
 
             return (
@@ -165,7 +176,22 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                     <SepaSortHeader field="current_price" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
                       株価
                     </SepaSortHeader>
-                    {isPullback ? (
+                    {isBreakoutPullback ? (
+                      <>
+                        <SepaSortHeader field="dist_sma25_pct" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                          MA乖離
+                        </SepaSortHeader>
+                        <SepaSortHeader field="days_since_breakout" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                          ブレイク / 調整
+                        </SepaSortHeader>
+                        <SepaSortHeader field="min_vdu_ratio" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
+                          出来高枯渇比
+                        </SepaSortHeader>
+                        <SepaSortHeader field="rs_rating" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="center">
+                          RS
+                        </SepaSortHeader>
+                      </>
+                    ) : isPullback ? (
                       <>
                         <SepaSortHeader field={isPullback25 ? "dist_sma25_pct" : "dist_sma50_pct"} currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
                           {isPullback25 ? '25日線乖離' : '50日線乖離'}
@@ -226,12 +252,12 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                           onClick={() => setSelectedTicker(s.ticker)}
                           className={isSelected ? 'selected' : ''}
                         >
-                          <td>
+                          <td style={{ minWidth: '170px' }}>
                             <div style={{ fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                                <span>{s.name}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
                                 {isTier1 && (
-                                  <span className="sepa-badge-tier1" style={{ fontSize: '0.6rem', padding: '0.08rem 0.3rem' }}>
+                                  <span className="sepa-badge-tier1" style={{ fontSize: '0.6rem', padding: '0.08rem 0.3rem', flexShrink: 0 }}>
                                     Tier 1
                                   </span>
                                 )}
@@ -244,7 +270,7 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                                 ? `GICS: ${gics.sector_name} > ${gics.industry_name} > ${gics.sub_industry_name}\n(東証33業種: ${s.industry})` 
                                 : `東証33業種: ${s.industry}`;
                               return (
-                                <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.15rem' }} title={tooltip}>
+                                <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.15rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tooltip}>
                                   <span style={{ color: gics ? '#38bdf8' : '#94a3b8', fontWeight: gics ? 500 : 400 }}>
                                     {gics ? gics.sub_industry_name : s.industry}
                                   </span>
@@ -253,11 +279,99 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                               );
                             })()}
                           </td>
-                          <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
+                          <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, whiteSpace: 'nowrap' }}>
                             {s.current_price.toLocaleString()}円
                           </td>
 
-                          {isPullback ? (
+                          {isBreakoutPullback ? (
+                            <>
+                              {/* MA乖離 & サポート種別 */}
+                              <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                {(() => {
+                                  const is25 = Boolean(s.is_pullback_25);
+                                  const dist = is25 ? s.dist_sma25_pct : s.dist_sma50_pct;
+                                  const sma = is25 ? s.sma_25 : s.sma_50;
+                                  if (dist == null) return '---';
+                                  const color = dist <= 0 ? '#34d399' : '#38bdf8';
+                                  return (
+                                    <div>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.3rem' }}>
+                                        <span style={{
+                                          fontSize: '0.62rem',
+                                          padding: '0.08rem 0.3rem',
+                                          borderRadius: '4px',
+                                          background: is25 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(6, 182, 212, 0.2)',
+                                          border: is25 ? '1px solid rgba(168, 85, 247, 0.4)' : '1px solid rgba(6, 182, 212, 0.4)',
+                                          color: is25 ? '#c084fc' : '#22d3ee',
+                                          fontWeight: 700,
+                                          whiteSpace: 'nowrap'
+                                        }}>
+                                          {is25 ? '★ 25MA' : '50MA'}
+                                        </span>
+                                        <span style={{ color, fontWeight: 700 }}>
+                                          {dist > 0 ? `+${dist.toFixed(1)}%` : `${dist.toFixed(1)}%`}
+                                        </span>
+                                      </div>
+                                      <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.1rem' }}>
+                                        {sma ? `${sma.toLocaleString()}円` : ''}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </td>
+                              {/* ブレイク経過 & 高値調整 */}
+                              <td style={{ textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                                {s.days_since_breakout != null ? (
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.35rem' }}>
+                                      <span style={{
+                                        padding: '0.08rem 0.3rem',
+                                        fontSize: '0.65rem',
+                                        borderRadius: '4px',
+                                        background: 'rgba(245, 158, 11, 0.15)',
+                                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                                        color: '#fbbf24',
+                                        fontWeight: 700
+                                      }}>
+                                        {s.days_since_breakout}日前
+                                      </span>
+                                      <span style={{ color: '#fbbf24', fontWeight: 700 }}>
+                                        {s.pullback_from_breakout_high_pct != null ? `${s.pullback_from_breakout_high_pct}%` : '---'}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.1rem' }}>
+                                      {s.breakout_date ? s.breakout_date.slice(5) : ''}
+                                      {s.breakout_price ? ` (${s.breakout_price.toLocaleString()}円)` : ''}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  '---'
+                                )}
+                              </td>
+                              {/* 出来高枯渇比 */}
+                              <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                {s.min_vdu_ratio != null ? (
+                                  <span style={{
+                                    padding: '0.15rem 0.4rem',
+                                    fontSize: '0.65rem',
+                                    borderRadius: '4px',
+                                    background: s.min_vdu_ratio <= 0.75 ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.05)',
+                                    border: s.min_vdu_ratio <= 0.75 ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid rgba(255,255,255,0.1)',
+                                    color: s.min_vdu_ratio <= 0.75 ? '#818cf8' : '#94a3b8',
+                                    fontWeight: 600
+                                  }}>
+                                    {(s.min_vdu_ratio * 100).toFixed(0)}%
+                                  </span>
+                                ) : (
+                                  '---'
+                                )}
+                              </td>
+                              {/* RS */}
+                              <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 700, whiteSpace: 'nowrap', color: (s.rs_rating ?? 0) >= 80 ? '#34d399' : '#818cf8' }}>
+                                {s.rs_rating ?? '---'}
+                              </td>
+                            </>
+                          ) : isPullback ? (
                             <>
                               <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
                                 {(() => {
@@ -371,7 +485,28 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                     })()}
                   </h3>
                   <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                    {mode === 'stage2_pullback_25' || mode === 'stage2_pullback_50' ? (
+                    {mode === 'breakout_pullback' ? (
+                      <>
+                        種別: <span style={{ color: diagnostics.metrics.is_pullback_25 ? '#c084fc' : '#22d3ee', fontWeight: 700 }}>
+                          {diagnostics.metrics.is_pullback_25 ? '★ 25日押し目' : '50日押し目'}
+                        </span> | 
+                        ブレイク: <span style={{ color: '#fbbf24', fontWeight: 600 }}>
+                          {diagnostics.metrics.days_since_breakout != null ? `${diagnostics.metrics.days_since_breakout}日前 (${diagnostics.metrics.breakout_date})` : '---'}
+                        </span> | 
+                        高値調整: <span style={{ color: '#f97316', fontWeight: 600 }}>
+                          {diagnostics.metrics.pullback_from_breakout_high_pct != null ? `${diagnostics.metrics.pullback_from_breakout_high_pct}%` : '---'}
+                        </span> | 
+                        MA乖離: <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+                          {diagnostics.metrics.is_pullback_25 
+                            ? `${diagnostics.metrics.dist_sma25_pct != null && diagnostics.metrics.dist_sma25_pct > 0 ? '+' : ''}${diagnostics.metrics.dist_sma25_pct?.toFixed(1)}% (25MA)`
+                            : `${diagnostics.metrics.dist_sma50_pct != null && diagnostics.metrics.dist_sma50_pct > 0 ? '+' : ''}${diagnostics.metrics.dist_sma50_pct?.toFixed(1)}% (50MA)`}
+                        </span> | 
+                        枯渇比: <span style={{ color: '#818cf8', fontWeight: 600 }}>
+                          {diagnostics.metrics.min_vdu_ratio != null ? `${(diagnostics.metrics.min_vdu_ratio * 100).toFixed(0)}%` : '---'}
+                        </span> | 
+                        RS: <span style={{ color: '#34d399', fontWeight: 700 }}>{diagnostics.metrics.rs_rating}</span>
+                      </>
+                    ) : mode === 'stage2_pullback_25' || mode === 'stage2_pullback_50' ? (
                       <>
                         20日高値: <span style={{ color: '#f97316', fontWeight: 600 }}>{diagnostics.metrics.swing_high_20d ? `${diagnostics.metrics.swing_high_20d.toLocaleString()}円` : '---'}</span> | 
                         押し幅: <span style={{ color: '#fbbf24', fontWeight: 600 }}>{diagnostics.metrics.pullback_depth_pct != null ? `${diagnostics.metrics.pullback_depth_pct.toFixed(1)}%` : '---'}</span> | 

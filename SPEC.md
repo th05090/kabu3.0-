@@ -109,14 +109,15 @@ graph TD
   - RS（レラティブストレングス）ランキング順、または「掲載日（Stage2突入日）」によるソートが可能。リスト復帰時にも最新の突入日を表示。
 - **VCP・セットアップ候補タブ (`VcpCandidatesTab`)**:
   - トレンドテンプレート合格銘柄の中から、ベース形成（20〜65日）およびピボット形成（直近2〜15日）を経たブレイクアウト直前・直後の銘柄、および25日/50日SMAへのプルバック（押し目）銘柄を抽出。
-  - 上部に4つのモード切替チップを搭載：
+  - 上部に5つのモード切替チップを搭載：
     - `[ Stage2 + コア成長 (Tier 1) ]`: エメラルド (`#10b981`)
     - `[ ★ Stage2 + 25日押し目 ]`: パープル (`#a855f7`, チャートの25SMA色に一致、強モメンタム浅押し)
     - `[ Stage2 + 50日押し目 ]`: シアン (`#06b6d4`, 機関投資家サポート押し)
+    - `[ 🚀 ブレイク後押し目 ]`: アンバー (`#f59e0b`, 過去3〜30日前に出来高1.3倍超でベース突破した銘柄の25日/50日ファースト・プルバック。見せかけブレイクを排除する防衛基準［過去60営業日高値突破・CLV>=0.70上ヒゲ排除・ブレイク時SMA50>SMA200・52週高値から-15%以内・押し目深さガード］を厳格適用)
     - `[ 全VCP候補 ]`: アンバー (`#f59e0b`, セットアップ全件)
   - オプショントグル（「株式のみ」「時価総額 100〜1,000億」「時価総額 300〜3,000億」「売買代金 >= 1億」）を独立オーバーレイ可能。
   - 左ペイン（候補銘柄一覧）と右ペイン（クイック詳細プレビュー）の2ペイン構成。
-  - 押し目モード選択時は、左テーブルが自動的に「25日線/50日線乖離・押し幅%・出来高枯渇比・RS」へ切り替わり、押し目深度とサポート状況を即座に確認可能。
+  - 押し目モード選択時は、左テーブルが自動的に「25日線/50日線乖離・押し幅%・出来高枯渇比・RS」へ切り替わり、押し目深度とサポート状況を即座に確認可能。「🚀 ブレイク後押し目」選択時は「銘柄・株価・MA乖離(25MA/50MAバッジ)・ブレイク/調整(経過日数と高値下落率)・出来高枯渇比・RS」のコンパクトな6列構成で表示される。
   - チャート上にはベース期間高値（ベースレジスタンス：橙色点線）と真のピボット（ピボットライン：金色破線）、および25日SMA（紫）・50日SMA（緑）・150日SMA（青）・200日SMA（赤）を表示。
 - **個別銘柄SEPA診断タブ (`DiagnosticsTab`)**:
   - 銘柄コード入力により、当該銘柄のSEPA適合状況（Stage2の8条件、ファンダメンタル4項目、VCP健全性ガード）を一目で判定する個別詳細診断ビュー。
@@ -477,11 +478,15 @@ CREATE TABLE IF NOT EXISTS sepa_metrics (
   min_vdu_ratio REAL,
   has_distribution_day INTEGER,
   is_pullback_25 INTEGER,
-  is_pullback_50 INTEGER,
   ir_catalyst_count INTEGER,
   latest_ir_title TEXT,
   latest_ir_date TEXT,
-  gics_sub_industry_id TEXT
+  gics_sub_industry_id TEXT,
+  has_breakout_prior INTEGER DEFAULT 0,
+  days_since_breakout INTEGER,
+  breakout_date TEXT,
+  breakout_price REAL,
+  pullback_from_breakout_high_pct REAL
 );
 ```
 
@@ -563,7 +568,23 @@ export interface SepaVcpMetrics {
   is_volume_dryup: boolean;
 }
 
-export interface SepaStockRecord extends SepaTrendMetrics, SepaRsMetrics, SepaFundamentalsMetrics, SepaVcpMetrics {
+export interface SepaPullbackMetrics {
+  swing_high_20d: number | null;
+  pullback_depth_pct: number | null;
+  max_dd_60d: number | null;
+  min_volume_5d: number | null;
+  min_vdu_ratio: number | null;
+  has_distribution_day: boolean;
+  is_pullback_25: boolean;
+  is_pullback_50: boolean;
+  has_breakout_prior: boolean;
+  days_since_breakout: number | null;
+  breakout_date: string | null;
+  breakout_price: number | null;
+  pullback_from_breakout_high_pct: number | null;
+}
+
+export interface SepaStockRecord extends SepaTrendMetrics, SepaRsMetrics, SepaFundamentalsMetrics, SepaVcpMetrics, SepaPullbackMetrics {
   ticker: string;
   name: string;
   market: string;
@@ -908,6 +929,14 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
    - 直近20営業日以内に一度でも終値が200日SMAを $5\%$ 以上割り込んだ（$Close < SMA200 \times 0.95$）ことがある銘柄を排除。
 8. **RSレーティング**:
    - 市場上位 $25\%$ 以内の強さを持つ銘柄に限定（`rs_rating >= 75`）。
+9. **ブレイク後押し目（First Pullback）および偽ブレイク防衛ロジック**:
+   - `is_pullback_25 = 1` または `is_pullback_50 = 1` の銘柄に対し、直近3〜30営業日前（$T_{BO} \in [3, 30]$）のブレイクアウトを探索：
+     - **出来高急増**: $Volume[T_{BO}] \ge \text{当時50日平均出来高} \times 1.3$
+     - **上ヒゲ排除（CLV）**: $CLV = \frac{Close[T_{BO}] - Low[T_{BO}]}{High[T_{BO}] - Low[T_{BO}]} \ge 0.70$（上位30%以内の高値引け大陽線）
+     - **防衛1: 過去60営業日（約1四半期）高値突破**: $Close[T_{BO}] > \max(High[T_{BO}-60 \dots T_{BO}-1])$（底値圏の戻り売り壁を確実に判定窓に含める）
+     - **防衛2: ブレイク日時点の Stage 2 健全性**: $SMA50[T_{BO}] > SMA200[T_{BO}]$ かつ $Close[T_{BO}] > SMA50[T_{BO}]$
+     - **防衛3: 52週高値から -15% 以内**: $Close[T_{BO}] \ge High_{52w}[T_{BO}] \times 0.85$
+     - **防衛4: 押し目健全深さガード**: ブレイク後最高値からの調整率が25MA押し目なら $\ge -12.0\%$、50MA押し目なら $\ge -20.0\%$
 
 ### 7.3 東証33業種 -> GICS ハード制約マッピング (`TSE_TO_GICS_MAPPING`)
 ハルシネーションによる大分類の誤りを防ぐため、`src/lib/anomaly_detector.ts` 等で定義された `TSE_TO_GICS_MAPPING` を利用します。

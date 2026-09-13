@@ -98,6 +98,11 @@ export interface SepaPullbackMetrics {
   has_distribution_day: boolean;     // 直近5営業日に大商い下落日 (出来高>=1.5倍) があるか
   is_pullback_25: boolean;           // 25日SMA押し目合格フラグ (強モメンタム浅押し)
   is_pullback_50: boolean;           // 50日SMA押し目合格フラグ (機関投資家本格押し)
+  has_breakout_prior: boolean;       // 過去3〜25営業日前のブレイク履歴有無
+  days_since_breakout: number | null; // ブレイクアウトからの経過営業日数
+  breakout_date: string | null;      // ブレイクアウト発生日 (YYYY-MM-DD)
+  breakout_price: number | null;     // ブレイクアウト当日の終値
+  pullback_from_breakout_high_pct: number | null; // ブレイク後高値からの現在値下落率 (%)
 }
 
 // SEPA 総合銘柄レコード (キャッシュテーブル & API返却用)

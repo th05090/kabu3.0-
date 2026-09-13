@@ -32,6 +32,11 @@ export async function GET(req: Request) {
       // 50日SMA押し目モード: 構造的Stage 2 + 50日押し目成立 + RS>=75
       conditions.push('is_pullback_50 = 1');
       conditions.push('rs_rating >= 75');
+    } else if (mode === 'breakout_pullback') {
+      // ブレイク後押し目モード: 構造的Stage 2 + (25日押し目 OR 50日押し目) + 過去3〜25日前のブレイク履歴 + RS>=75
+      conditions.push('(is_pullback_25 = 1 OR is_pullback_50 = 1)');
+      conditions.push('has_breakout_prior = 1');
+      conditions.push('rs_rating >= 75');
     } else if (mode === 'all') {
       conditions.push('is_trend_template_pass = 1');
       conditions.push('(is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)');
@@ -87,6 +92,9 @@ export async function GET(req: Request) {
       rs_rating: 'rs_rating',
       market_cap: 'market_cap',
       funda_score: fundaScoreExpr,
+      days_since_breakout: 'days_since_breakout',
+      breakout_date: 'breakout_date',
+      pullback_from_breakout_high_pct: 'pullback_from_breakout_high_pct',
     };
 
     const sortBy = searchParams.get('sort_by');
@@ -97,6 +105,8 @@ export async function GET(req: Request) {
       orderSql = 'ORDER BY rs_rating DESC, dist_sma25_pct ASC';
     } else if (mode === 'stage2_pullback_50') {
       orderSql = 'ORDER BY rs_rating DESC, dist_sma50_pct ASC';
+    } else if (mode === 'breakout_pullback') {
+      orderSql = 'ORDER BY days_since_breakout ASC, rs_rating DESC';
     }
 
     if (sortBy && validSortColumns[sortBy]) {
