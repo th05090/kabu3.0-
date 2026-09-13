@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSepaDiagnostics } from '../hooks/useSepa';
 import { SepaPriceChart } from './SepaPriceChart';
 import { RiskRewardPanel } from './RiskRewardPanel';
@@ -14,8 +14,21 @@ interface DiagnosticsTabProps {
 }
 
 export function DiagnosticsTab({ initialTicker }: DiagnosticsTabProps) {
-  const [tickerInput, setTickerInput] = useState<string>(initialTicker || '72030');
-  const [currentTicker, setCurrentTicker] = useState<string>(initialTicker || '72030');
+  const getNormalizedTicker = (t?: string | null) => {
+    if (!t) return '7203';
+    return t.length === 5 && t.endsWith('0') ? t.slice(0, 4) : t;
+  };
+
+  const [tickerInput, setTickerInput] = useState<string>(getNormalizedTicker(initialTicker));
+  const [currentTicker, setCurrentTicker] = useState<string>(getNormalizedTicker(initialTicker));
+
+  useEffect(() => {
+    if (initialTicker) {
+      const normalized = getNormalizedTicker(initialTicker);
+      setTickerInput(normalized);
+      setCurrentTicker(normalized);
+    }
+  }, [initialTicker]);
 
   const { diagnostics, isLoading, error } = useSepaDiagnostics(currentTicker);
 
@@ -31,12 +44,12 @@ export function DiagnosticsTab({ initialTicker }: DiagnosticsTabProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* 銘柄検索バー */}
-      <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', maxWidth: '360px' }}>
+      <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', maxWidth: '400px' }}>
         <div style={{ position: 'relative', flex: 1 }}>
           <Search size={16} className="sepa-search-icon" />
           <input
             type="text"
-            placeholder="銘柄コードを入力 (例: 72030, 69200)..."
+            placeholder="銘柄コードまたは企業名 (例: 7203, レーザーテック)..."
             className="sepa-search-input"
             value={tickerInput}
             onChange={(e) => setTickerInput(e.target.value)}
@@ -64,7 +77,9 @@ export function DiagnosticsTab({ initialTicker }: DiagnosticsTabProps) {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fff', margin: 0 }}>{m.name}</h2>
-                <span style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#94a3b8' }}>{m.ticker}</span>
+                <span style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#94a3b8' }}>
+                  {m.ticker.length === 5 && m.ticker.endsWith('0') ? m.ticker.slice(0, 4) : m.ticker}
+                </span>
                 {(() => {
                   const gics = m.gics_sub_industry_id ? GICS_DICTIONARY[m.gics_sub_industry_id] : null;
                   const tooltip = gics 
