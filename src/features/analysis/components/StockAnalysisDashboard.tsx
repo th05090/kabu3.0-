@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { PriceChart } from './PriceChart';
 import { AIAnalystReport } from './AIAnalystReport';
+import { GicsClassificationCard } from './GicsClassificationCard';
 import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
 interface Props {
@@ -181,26 +182,13 @@ export function StockAnalysisDashboard({ stock, quotes, financials, aiReport, eq
           </div>
         </div>
 
-        {/* 分類情報 */}
-        <div className="bento-card">
-          <h2>分類情報</h2>
-          <div className="metric-row">
-            <span className="metric-label">大分類 (主幹テーマ)</span>
-            <span className="metric-value" style={{ color: 'var(--primary)' }}>{gicsInfo?.sector_name || equities?.theme || '未分類'}</span>
-          </div>
-          <div className="metric-row">
-            <span className="metric-label">中分類</span>
-            <span className="metric-value">{gicsInfo?.industry_group_name || '-'}</span>
-          </div>
-          <div className="metric-row">
-            <span className="metric-label">小分類</span>
-            <span className="metric-value">{gicsInfo?.industry_name || '-'}</span>
-          </div>
-          <div className="metric-row">
-            <span className="metric-label">細分類</span>
-            <span className="metric-value" style={{ fontSize: '0.9rem', textAlign: 'right' }}>{gicsInfo?.sub_industry_name || '-'}</span>
-          </div>
-        </div>
+        {/* 分類情報 (GICS細分類選択・自動逆算・DB即時反映) */}
+        <GicsClassificationCard
+          ticker={stock.ticker}
+          gicsInfo={gicsInfo}
+          fallbackTheme={equities?.theme}
+          onGicsChanged={(newGics) => setGicsInfo(newGics)}
+        />
 
         {/* テーマ情報 */}
         <div className="bento-card">
