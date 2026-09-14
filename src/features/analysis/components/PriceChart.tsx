@@ -90,7 +90,7 @@ export function PriceChart({ data }: PriceChartProps) {
     return {
       time: d.date,
       value: d.adj_volume || d.volume,
-      color: close >= open ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)',
+      color: close >= open ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)',
     };
   }), [sanitizedData]);
 
@@ -121,11 +121,11 @@ export function PriceChart({ data }: PriceChartProps) {
 
     // Main Candlestick
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#ef4444',
-      downColor: '#22c55e',
+      upColor: '#10b981',
+      downColor: '#ef4444',
       borderVisible: false,
-      wickUpColor: '#ef4444',
-      wickDownColor: '#22c55e',
+      wickUpColor: '#10b981',
+      wickDownColor: '#ef4444',
     });
     candlestickSeries.setData(candleData);
     seriesRefs.current.candle = candlestickSeries;
