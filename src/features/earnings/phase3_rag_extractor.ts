@@ -3,13 +3,10 @@ import { QdrantClient } from '@qdrant/js-client-rest';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { askLLM, pass2PromptTemplate, step2PromptTemplate, unifiedPromptTemplate } from '../../scripts/rag/theme_prompts';
 import { runStage1, runStage2, runStage3, embedOllama } from '../../lib/segment_extractor';
 import { reclassifyGics } from '../gics/classifier';
 
-const execAsync = promisify(exec);
 const db = createClient({ url: process.env.DATABASE_URL || 'file:local.db' });
 const qdrant = new QdrantClient({ host: 'localhost', port: 6333 });
 const EMBED_URL = "http://localhost:11434/api/embeddings";
@@ -19,9 +16,13 @@ function generateUuidForTicker(ticker: string): string {
   return `${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;
 }
 
-export async function runPhase2(rowsToProcess: any[], total: number, onProgress?: (msg: string) => void): Promise<number> {
-  let phase2Count = 0;
-  console.log(`\n=== Phase 2: AI Parsing and DB Update (${total} items) ===`);
+/**
+ * Phase 3: LLMを用いたセグメント情報のRAG抽出、GICS再分類、およびAIアナリストレポート生成。
+ * （※ 通常の定期データ同期では skipPhase3 = true でスキップされ、将来の個別分析等で活用可能）
+ */
+export async function runPhase3(rowsToProcess: any[], total: number, onProgress?: (msg: string) => void): Promise<number> {
+  let phase3Count = 0;
+  console.log(`\n=== Phase 3: AI Parsing and DB Update (${total} items) ===`);
   for (let i = 0; i < total; i++) {
     const row = rowsToProcess[i];
     const ticker = String(row.ticker);
@@ -36,27 +37,23 @@ export async function runPhase2(rowsToProcess: any[], total: number, onProgress?
     } catch(e) {}
 
     if (mdFiles.length === 0) {
-      console.log(`  => Skipping ${ticker} in Phase 2 because no Markdown found.`);
+      console.log(`  => Skipping ${ticker} in Phase 3 because no Markdown found.`);
       continue;
     }
 
     const latestMdFile = mdFiles[0];
     const mdPath = path.join(tickerPdfDir, latestMdFile);
     const pdfPath = path.join(tickerPdfDir, latestMdFile.replace('.md', '.pdf'));
-    const actualDate = latestMdFile.replace(`${ticker}_`, '').replace('.md', '');
 
     if (existsSync(pdfPath + ".done")) {
       continue;
     }
 
-    console.log(`\n[*] [Phase 2: ${i+1}/${total}] AI Analysis for ${row.name} (${ticker})`);
-    if (onProgress) onProgress(`[フェーズ2: ${i+1}/${total}] AI決算解析中: ${row.name} (${ticker})...`);
+    console.log(`\n[*] [Phase 3: ${i+1}/${total}] AI Analysis for ${row.name} (${ticker})`);
+    if (onProgress) onProgress(`[フェーズ3: ${i+1}/${total}] AI決算解析中: ${row.name} (${ticker})...`);
 
     try {
-      console.log(`  [1/4] Embedding Markdown into Qdrant...`);
-      await execAsync(`npx tsx src/scripts/embed_markdown.ts ${ticker} ${actualDate}`);
-
-      console.log(`  [2/4] Extracting Segment Info via RAG (Gemma 4)...`);
+      console.log(`  [1/3] Extracting Segment Info via RAG...`);
       let markdown = "";
       try {
         markdown = await fs.readFile(mdPath, 'utf-8');
@@ -64,7 +61,7 @@ export async function runPhase2(rowsToProcess: any[], total: number, onProgress?
         console.error(`  => [Warning] Markdown file read failed: ${e.message}`);
       }
 
-      // Phase 1: 3-Stage Extraction (from SPEC.md)
+      // 3-Stage Extraction
       let segmentsData = runStage1(markdown);
       let extractionStage = "Stage 1 (Table)";
       
@@ -98,55 +95,49 @@ export async function runPhase2(rowsToProcess: any[], total: number, onProgress?
       });
       let indexKeywords = row.theme_keywords ? String(row.theme_keywords) : "";
       let indexSummary = "";
-      let refInfo = "";
       if (shikihoRes.rows.length > 0) {
-        const shRow = shikihoRes.rows[0];
-        if (shRow.index_keywords) indexKeywords = String(shRow.index_keywords);
-        indexSummary = String(shRow.index_summary);
-        refInfo = `【参考情報】\n**事業概要:**\n${indexSummary}\n\n**機能的価値 (キーワード):**\n${indexKeywords}\n`;
+        indexSummary = String(shikihoRes.rows[0].index_summary || "");
+        if (!indexKeywords) {
+          indexKeywords = String(shikihoRes.rows[0].index_keywords || "");
+        }
       }
+      const refInfo = `【四季報事業概要】\n${indexSummary}\n【機能的価値キーワード】\n${indexKeywords}`;
 
-      let summary = row.summary ? String(row.summary) : "";
+      let summary = "";
       let mainSegmentJson = "";
       let subSegmentsJson = "";
 
-      // Phase 2: Dynamic Pass 2 or Plan 1
       if (segmentNames.length === 0) {
-        console.log(`  => [Fallback] No segments found. Running Unified Prompt (Plan 1).`);
-        const embResText = await embedOllama("bge-m3", "報告セグメント 概要 事業内容 製品 サービス");
-        let earningsText = "";
+        console.log(`  => No segments found. Falling back to Plan 1 (Unified Prompt)...`);
+        let llmText = await askLLM(unifiedPromptTemplate(String(row.name), ticker, indexSummary, indexKeywords, ""), true);
         try {
-          const searchResText = await qdrant.search("earnings_reports", {
-            vector: embResText.embedding,
-            limit: 3,
-            filter: { must: [{ key: "ticker", match: { value: ticker } }] }
-          });
-          earningsText = searchResText.map(hit => hit.payload?.text || "").join("\n");
+          const parsed = JSON.parse(llmText);
+          summary = parsed.summary ? parsed.summary.trim() : llmText;
         } catch(e) {
-          earningsText = "テキストなし";
-        }
-        let finalOutput = await askLLM(unifiedPromptTemplate(String(row.name), ticker, indexSummary, indexKeywords, earningsText), true);
-        try {
-          const parsed = JSON.parse(finalOutput);
-          summary = parsed.summary ? parsed.summary.trim() : finalOutput;
-        } catch(e) {
-          summary = finalOutput;
+          summary = llmText;
         }
       } else {
-        console.log(`  => Running Pass 2 (Dynamic Query per Segment)...`);
-        const uniqueChunks = new Map<string, string>();
-        for (const segment of segmentNames) {
-            const query = `${segment} 事業内容 概要 製品 サービス`;
-            const embed = await embedOllama("bge-m3", query);
-            const searchRes = await qdrant.search('earnings_reports', {
-                vector: embed.embedding,
-                limit: 2,
-                filter: { must: [{ key: 'ticker', match: { value: ticker } }] }
+        console.log(`  => Running Pass 2 for segments: ${segmentNames.join(", ")}`);
+        
+        let uniqueChunks = new Map<string, string>();
+        for (const seg of segmentNames) {
+          try {
+            const embed = await embedOllama("bge-m3", `${seg} 事業内容 概要 製品 サービス`);
+            const sRes = await qdrant.search("earnings_reports", {
+              vector: embed.embedding,
+              limit: 2,
+              filter: { must: [{ key: "ticker", match: { value: ticker } }] }
             });
-            for (const hit of searchRes) {
-                if (!uniqueChunks.has(String(hit.id))) uniqueChunks.set(String(hit.id), String(hit.payload?.text));
+            for (const r of sRes) {
+              if (r.payload?.text) {
+                uniqueChunks.set(String(r.id), String(r.payload.text));
+              }
             }
+          } catch (e: any) {
+            console.error(`  => [Warning] Qdrant search failed for segment ${seg}:`, e.message);
+          }
         }
+
         const pass2Text = Array.from(uniqueChunks.values()).join("\n\n");
         let llmText2 = await askLLM(pass2PromptTemplate(segmentNames, pass2Text), true);
         llmText2 = llmText2.replace(/^```(json)?/, "").replace(/```$/, "").trim();
@@ -199,8 +190,7 @@ export async function runPhase2(rowsToProcess: any[], total: number, onProgress?
         subSegmentsJson = JSON.stringify(otherSegments);
       }
 
-      console.log(`  [3/4] Updating DB and GICS...`);
-      // 冪等性を担保するため、.doneが未作成の銘柄は常にDB・GICS・Qdrantを上書き更新する
+      console.log(`  [2/3] Updating DB and GICS...`);
       await db.execute({
         sql: "UPDATE equities_master SET summary = ?, main_segment = ?, sub_segments = ?, theme_keywords = ? WHERE ticker = ?",
         args: [summary, mainSegmentJson || "{}", subSegmentsJson || "[]", indexKeywords, ticker]
@@ -252,14 +242,13 @@ export async function runPhase2(rowsToProcess: any[], total: number, onProgress?
       });
       console.log(`  => Successfully updated Qdrant vector for ${ticker}`);
 
-      console.log(`  [4/4] Generating AI Analyst Report (SKIPPED in Data Sync)...`);
-      
+      console.log(`  [3/3] Completing Phase 3...`);
       await fs.writeFile(pdfPath + ".done", new Date().toISOString());
 
-      phase2Count++;
+      phase3Count++;
     } catch (err: any) {
-      console.error(`  [Error] Failed to process ${ticker} in Phase 2:`, err.message);
+      console.error(`  [Error] Failed to process ${ticker} in Phase 3:`, err.message);
     }
   }
-  return phase2Count;
+  return phase3Count;
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import { createClient } from '@libsql/client';
 import { notFound } from 'next/navigation';
 import { StockAnalysisDashboard } from '@/features/analysis/components/StockAnalysisDashboard';
+import { getEarningsPdfsForTicker } from '@/features/analysis/lib/earnings_pdfs';
 import fs from 'fs';
 import path from 'path';
 
@@ -103,6 +104,9 @@ export default async function StockAnalysisPage({ params }: PageProps) {
     console.error('Failed to read AI report from DB:', err);
   }
 
+  // 5. Fetch local earnings PDFs (up to 4 recent periods)
+  const earningsPdfs = getEarningsPdfsForTicker(ticker);
+
   return (
     <div style={{ backgroundColor: 'var(--background)', flex: 1, height: '100%', overflowY: 'auto', padding: '1rem' }}>
       <StockAnalysisDashboard 
@@ -112,6 +116,7 @@ export default async function StockAnalysisPage({ params }: PageProps) {
         aiReport={aiReportData}
         equities={equitiesData}
         shikiho={shikihoData}
+        earningsPdfs={earningsPdfs}
       />
     </div>
   );

@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { PriceChart } from './PriceChart';
 import { AIAnalystReport } from './AIAnalystReport';
 import { GicsClassificationCard } from './GicsClassificationCard';
+import { EarningsPdfsCard } from './EarningsPdfsCard';
+import { EarningsPdfItem } from '../lib/earnings_pdfs';
 import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
 interface Props {
@@ -13,9 +15,10 @@ interface Props {
   aiReport?: any;
   equities?: any;
   shikiho?: any;
+  earningsPdfs?: EarningsPdfItem[];
 }
 
-export function StockAnalysisDashboard({ stock, quotes, financials, aiReport, equities, shikiho }: Props) {
+export function StockAnalysisDashboard({ stock, quotes, financials, aiReport, equities, shikiho, earningsPdfs = [] }: Props) {
   const fmt = (v: any, p='', s='') => v == null ? '-' : `${p}${Number(v).toLocaleString()}${s}`;
   
   // Use passed aiReport if available
@@ -281,6 +284,9 @@ export function StockAnalysisDashboard({ stock, quotes, financials, aiReport, eq
         {aiData && (
           <AIAnalystReport data={aiData} />
         )}
+
+        {/* 12. 決算開示資料 (直近4期 PDF) */}
+        <EarningsPdfsCard pdfs={earningsPdfs} />
 
       </div>
     </div>

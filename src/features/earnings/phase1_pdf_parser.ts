@@ -29,8 +29,14 @@ async function waitForVram(minFreeGb: number = 3.0, maxWaitMs: number = 30000): 
   console.log(`[VRAM Check] Timed out waiting for VRAM. Proceeding anyway.`);
 }
 
-export async function runPhase1(rowsToProcess: any[], total: number, onProgress?: (msg: string) => void): Promise<number> {
+export interface Phase1Result {
+  phase1Count: number;
+  newItems: { ticker: string; date: string }[];
+}
+
+export async function runPhase1(rowsToProcess: any[], total: number, onProgress?: (msg: string) => void): Promise<Phase1Result> {
   let phase1Count = 0;
+  const newItems: { ticker: string; date: string }[] = [];
   console.log(`\n=== Phase 1: PDF Fetch & Docling Parsing (${total} items) ===`);
   for (let i = 0; i < total; i++) {
     const row = rowsToProcess[i];
@@ -84,9 +90,10 @@ export async function runPhase1(rowsToProcess: any[], total: number, onProgress?
         console.log(`  => MD already exists for ${actualDate}. Skipping Docling.`);
       }
       phase1Count++;
+      newItems.push({ ticker, date: actualDate });
     } catch (err: any) {
       console.error(`  [Error] Failed to process ${ticker} in Phase 1:`, err.message);
     }
   }
-  return phase1Count;
+  return { phase1Count, newItems };
 }

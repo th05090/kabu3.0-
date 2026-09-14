@@ -286,9 +286,9 @@ export async function syncJQuants(onProgress?: (msg: string) => void) {
       await db.execute({ sql: 'INSERT INTO sync_history (key, synced_at) VALUES (?, ?)', args: [file.Key, new Date().toISOString()] });
     }
 
-    if (onProgress) onProgress('決算PDFの取得・Markdown変換 (Docling) を開始します...');
+    if (onProgress) onProgress('決算PDFの取得・Docling変換・Qdrantベクトル登録を開始します...');
     const { processEarningsReports } = await import('../features/earnings/index');
-    await processEarningsReports(onProgress, undefined, { skipPhase2: true });
+    await processEarningsReports(onProgress, undefined, { skipPhase3: true });
 
     // Ollama VRAM解放
     if (onProgress) onProgress('VRAMを解放中...');

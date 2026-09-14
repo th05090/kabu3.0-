@@ -2,13 +2,14 @@
 
 import React, { useState } from 'react';
 import { ThemeSearchTab } from './ThemeSearchTab';
+import { EarningsSearchTab } from './EarningsSearchTab';
 import { CustomThemesTab } from './CustomThemesTab';
 import { DataCleansingTab } from './DataCleansingTab';
 import { IRNewsTab } from './IRNewsTab';
 import { SectorInflowTab } from './SectorInflowTab';
 
 export function ThemeDiscoveryLayout() {
-  const [activeTab, setActiveTab] = useState<'search' | 'custom' | 'cleansing' | 'irnews' | 'sector_inflow'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'earnings' | 'custom' | 'cleansing' | 'irnews' | 'sector_inflow'>('search');
 
   return (
     <div className="theme-layout">
@@ -22,6 +23,12 @@ export function ThemeDiscoveryLayout() {
           onClick={() => setActiveTab('search')}
         >
           テーマ検索
+        </button>
+        <button
+          className={`theme-tab-btn ${activeTab === 'earnings' ? 'active' : ''}`}
+          onClick={() => setActiveTab('earnings')}
+        >
+          決算検索
         </button>
         <button
           className={`theme-tab-btn ${activeTab === 'sector_inflow' ? 'active' : ''}`}
@@ -51,6 +58,7 @@ export function ThemeDiscoveryLayout() {
 
       <div className="theme-content">
         {activeTab === 'search' && <ThemeSearchTab />}
+        {activeTab === 'earnings' && <EarningsSearchTab />}
         {activeTab === 'sector_inflow' && <SectorInflowTab />}
         {activeTab === 'custom' && <CustomThemesTab />}
         {activeTab === 'cleansing' && <DataCleansingTab />}
@@ -59,4 +67,3 @@ export function ThemeDiscoveryLayout() {
     </div>
   );
 }
-
