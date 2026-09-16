@@ -46,9 +46,10 @@ export async function GET(request: NextRequest) {
         COALESCE(m.gics_sub_industry_id, sm.gics_sub_industry_id) as gics_sub_id,
         sm.rs_rating,
         sm.sma_25,
+        sm.ema_21,
         sm.sma_50,
         sm.volume_50d_avg,
-        sm.is_pullback_25,
+        sm.is_pullback_21_ema,
         sm.is_pullback_50,
         sm.has_breakout_prior,
         sm.days_since_breakout
@@ -120,16 +121,16 @@ export async function GET(request: NextRequest) {
       const latest = quotes[qLen - 1];
       const prev = quotes[qLen - 2];
 
-      const isPullback25 = Number(row.is_pullback_25) === 1;
+      const isPullback21 = Number(row.is_pullback_21_ema) === 1;
       const isPullback50 = Number(row.is_pullback_50) === 1;
-      const isPullback = isPullback25 || isPullback50;
+      const isPullback = isPullback21 || isPullback50;
       const isBounceTriggered = isPullback && latest.close > latest.open && latest.close > prev.high;
 
       const daysSince = row.days_since_breakout != null ? Number(row.days_since_breakout) : 999;
       const isBreakoutRecent = Number(row.has_breakout_prior) === 1 && daysSince <= 5;
 
-      let pullbackType: 'NONE' | 'PULLBACK_25MA' | 'PULLBACK_50MA' = 'NONE';
-      if (isPullback25) pullbackType = 'PULLBACK_25MA';
+      let pullbackType: 'NONE' | 'PULLBACK_21EMA' | 'PULLBACK_50MA' = 'NONE';
+      if (isPullback21) pullbackType = 'PULLBACK_21EMA';
       else if (isPullback50) pullbackType = 'PULLBACK_50MA';
 
       stocksData.push({

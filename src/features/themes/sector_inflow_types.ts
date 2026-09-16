@@ -22,12 +22,12 @@ export interface SectorStatusBadgeInfo {
   description: string;
 }
 
-export type StockPullbackType = 'NONE' | 'PULLBACK_25MA' | 'PULLBACK_50MA' | 'BREAKOUT';
+export type StockPullbackType = 'NONE' | 'PULLBACK_21EMA' | 'PULLBACK_50MA' | 'BREAKOUT';
 
 export interface StockPullbackBadgeInfo {
   priority: number;
   label: string;
-  badgeType: 'trigger' | 'breakout' | 'pullback_25' | 'pullback_50' | 'none';
+  badgeType: 'trigger' | 'breakout' | 'pullback_21' | 'pullback_50' | 'none';
   description: string;
 }
 
@@ -171,7 +171,7 @@ export function resolveStockBadge(params: {
   const { pullbackType, isBounceTriggered, isRecentBreakout } = params;
 
   // [優先度 1] 🔥 反発トリガー
-  if ((pullbackType === 'PULLBACK_25MA' || pullbackType === 'PULLBACK_50MA') && isBounceTriggered) {
+  if ((pullbackType === 'PULLBACK_21EMA' || pullbackType === 'PULLBACK_50MA') && isBounceTriggered) {
     return {
       priority: 1,
       label: '🔥 反発トリガー',
@@ -190,13 +190,13 @@ export function resolveStockBadge(params: {
     };
   }
 
-  // [優先度 3] ★ 25MA押し目
-  if (pullbackType === 'PULLBACK_25MA') {
+  // [優先度 3] ★ 21EMA押し目
+  if (pullbackType === 'PULLBACK_21EMA') {
     return {
       priority: 3,
-      label: '★ 25MA押し目',
-      badgeType: 'pullback_25',
-      description: '25MA支持帯テスト中（反発監視対象）',
+      label: '★ 21EMA押し目',
+      badgeType: 'pullback_21',
+      description: '21EMA支持帯テスト中（反発監視対象）',
     };
   }
 

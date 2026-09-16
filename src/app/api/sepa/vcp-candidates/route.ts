@@ -8,7 +8,7 @@ const db = createClient({
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const mode = searchParams.get('mode') || 'strict_funda'; // 'strict_funda', 'stage2_pullback_25', 'stage2_pullback_50', 'all'
+    const mode = searchParams.get('mode') || 'strict_funda'; // 'strict_funda', 'stage2_pullback_21_ema', 'stage2_pullback_50', 'all'
     const excludeEtf = searchParams.get('exclude_etf') !== 'false'; // デフォルトで投信・ETF等を除外 (true)
     const sweetSpotCap = searchParams.get('sweet_spot_cap') === 'true'; // 時価総額100〜1,000億のオプショントグル
     const midLargeCap = searchParams.get('mid_large_cap') === 'true'; // 時価総額300〜3,000億のオプショントグル
@@ -24,17 +24,17 @@ export async function GET(req: Request) {
       conditions.push('is_operating_company = 1');
     }
 
-    if (mode === 'stage2_pullback_25') {
-      // 25日SMA押し目モード: 構造的Stage 2 + 25日押し目成立 + RS>=75
-      conditions.push('is_pullback_25 = 1');
+    if (mode === 'stage2_pullback_21_ema' || mode === 'stage2_pullback_25') {
+      // 21日EMA押し目モード: 構造的Stage 2 + 21日EMA押し目成立 + RS>=75
+      conditions.push('is_pullback_21_ema = 1');
       conditions.push('rs_rating >= 75');
     } else if (mode === 'stage2_pullback_50') {
       // 50日SMA押し目モード: 構造的Stage 2 + 50日押し目成立 + RS>=75
       conditions.push('is_pullback_50 = 1');
       conditions.push('rs_rating >= 75');
     } else if (mode === 'breakout_pullback') {
-      // ブレイク後押し目モード: 構造的Stage 2 + (25日押し目 OR 50日押し目) + 過去3〜25日前のブレイク履歴 + RS>=75
-      conditions.push('(is_pullback_25 = 1 OR is_pullback_50 = 1)');
+      // ブレイク後押し目モード: 構造的Stage 2 + (21日EMA押し目 OR 50日SMA押し目) + 過去3〜25日前のブレイク履歴 + RS>=75
+      conditions.push('(is_pullback_21_ema = 1 OR is_pullback_50 = 1)');
       conditions.push('has_breakout_prior = 1');
       conditions.push('rs_rating >= 75');
     } else if (mode === 'all') {
@@ -84,6 +84,7 @@ export async function GET(req: Request) {
       pivot_price: 'pivot_price',
       pivot_distance_pct: 'pivot_distance_pct',
       dist_sma25_pct: 'dist_sma25_pct',
+      dist_ema21_pct: 'dist_ema21_pct',
       dist_sma50_pct: 'dist_sma50_pct',
       pullback_depth_pct: 'pullback_depth_pct',
       min_vdu_ratio: 'min_vdu_ratio',
@@ -101,8 +102,8 @@ export async function GET(req: Request) {
     const order = searchParams.get('order')?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
     let orderSql = 'ORDER BY is_pivot_breakout DESC, is_near_pivot DESC, pivot_distance_pct DESC, rs_rating DESC';
-    if (mode === 'stage2_pullback_25') {
-      orderSql = 'ORDER BY rs_rating DESC, dist_sma25_pct ASC';
+    if (mode === 'stage2_pullback_21_ema' || mode === 'stage2_pullback_25') {
+      orderSql = 'ORDER BY rs_rating DESC, dist_ema21_pct ASC';
     } else if (mode === 'stage2_pullback_50') {
       orderSql = 'ORDER BY rs_rating DESC, dist_sma50_pct ASC';
     } else if (mode === 'breakout_pullback') {

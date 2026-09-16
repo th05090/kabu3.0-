@@ -54,10 +54,12 @@ export async function ensureSepaTable() {
       latest_date TEXT,
       current_price REAL,
       sma_25 REAL,
+      ema_21 REAL,
       sma_50 REAL,
       sma_150 REAL,
       sma_200 REAL,
       dist_sma25_pct REAL,
+      dist_ema21_pct REAL,
       dist_sma50_pct REAL,
       is_above_sma_50 INTEGER,
       is_above_sma_150 INTEGER,
@@ -102,7 +104,7 @@ export async function ensureSepaTable() {
       min_volume_5d REAL,
       min_vdu_ratio REAL,
       has_distribution_day INTEGER,
-      is_pullback_25 INTEGER,
+      is_pullback_21_ema INTEGER,
       is_pullback_50 INTEGER,
       pivot_price REAL,
       pivot_distance_pct REAL,
@@ -160,6 +162,18 @@ export async function ensureSepaTable() {
       const hasPullbackPct = tableInfo.rows.some(r => r.name === 'pullback_from_breakout_high_pct');
       if (!hasPullbackPct) {
         await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN pullback_from_breakout_high_pct REAL`);
+      }
+      const hasEma21 = tableInfo.rows.some(r => r.name === 'ema_21');
+      if (!hasEma21) {
+        await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN ema_21 REAL`);
+      }
+      const hasDistEma21 = tableInfo.rows.some(r => r.name === 'dist_ema21_pct');
+      if (!hasDistEma21) {
+        await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN dist_ema21_pct REAL`);
+      }
+      const hasPullback21Ema = tableInfo.rows.some(r => r.name === 'is_pullback_21_ema');
+      if (!hasPullback21Ema) {
+        await db.execute(`ALTER TABLE sepa_metrics ADD COLUMN is_pullback_21_ema INTEGER DEFAULT 0`);
       }
     }
   } catch (e) {
@@ -311,7 +325,7 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
     const vcp = calculateSepaVcp(quotes);
     const pb = calculateSepaPullback(
       quotes,
-      trend.sma_25,
+      trend.ema_21,
       trend.sma_50,
       trend.sma_200,
       trend.is_trend_structural_pass,
@@ -328,20 +342,61 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
     const isOp = isOperatingCompany(s.name, s.industry);
 
     batch.push({
-      sql: `INSERT INTO sepa_metrics VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      sql: `INSERT INTO sepa_metrics (
+        ticker, name, market, industry, is_operating_company, latest_date,
+        current_price, sma_25, ema_21, sma_50, sma_150, sma_200,
+        dist_sma25_pct, dist_ema21_pct, dist_sma50_pct,
+        is_above_sma_50, is_above_sma_150, is_above_sma_200,
+        is_sma_50_above_150_200, is_sma_150_above_200,
+        sma_200_slope_22d, is_sma200_uptrend_1m, is_sma200_uptrend_5m,
+        low_52w, distance_from_low_52w_pct, high_52w, distance_to_high_52w_pct,
+        is_ipo, is_trend_template_pass, passed_conditions_count, stage2_entry_date,
+        rs_score_raw, rs_rating, is_pseudo_rs,
+        sales_yoy_pct, op_yoy_pct, ordinary_profit_yoy_pct, eps_yoy_pct,
+        growth_status, is_growth_accelerating, is_margin_expanding,
+        has_3y_annual_growth, has_accounting_noise_risk,
+        standalone_sales, standalone_op, standalone_profit, standalone_eps,
+        roe, market_cap, avg_trading_value_5d,
+        base_high, base_depth_pct,
+        swing_high_20d, pullback_depth_pct, max_dd_60d, min_volume_5d, min_vdu_ratio,
+        has_distribution_day, is_pullback_21_ema, is_pullback_50,
+        pivot_price, pivot_distance_pct, is_near_pivot, is_pivot_breakout, is_handle_healthy,
+        atr_10, atr_50, atr_contraction_ratio, is_volatility_contracted,
+        volume_5d_avg, volume_50d_avg, volume_dryup_ratio, is_volume_dryup,
+        ir_catalyst_count, latest_ir_title, latest_ir_date,
+        gics_sub_industry_id,
+        has_breakout_prior, days_since_breakout, breakout_date, breakout_price,
+        pullback_from_breakout_high_pct
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?,
+        ?, ?, ?, ?,
+        ?
       )`,
       args: [
         ticker, s.name, s.market, s.industry, isOp ? 1 : 0, quotes[0].date,
-        trend.current_price, trend.sma_25, trend.sma_50, trend.sma_150, trend.sma_200,
-        trend.dist_sma25_pct, trend.dist_sma50_pct,
+        trend.current_price, trend.sma_25, trend.ema_21, trend.sma_50, trend.sma_150, trend.sma_200,
+        trend.dist_sma25_pct, trend.dist_ema21_pct, trend.dist_sma50_pct,
         trend.is_above_sma_50 ? 1 : 0, trend.is_above_sma_150 ? 1 : 0, trend.is_above_sma_200 ? 1 : 0,
         trend.is_sma_50_above_150_200 ? 1 : 0, trend.is_sma_150_above_200 ? 1 : 0,
         trend.sma_200_slope_22d, trend.is_sma200_uptrend_1m ? 1 : 0, trend.is_sma200_uptrend_5m ? 1 : 0,
@@ -355,7 +410,7 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
         fund.roe, fund.market_cap, fund.avg_trading_value_5d,
         vcp.base_high, vcp.base_depth_pct,
         pb.swing_high_20d, pb.pullback_depth_pct, pb.max_dd_60d, pb.min_volume_5d, pb.min_vdu_ratio,
-        pb.has_distribution_day ? 1 : 0, pb.is_pullback_25 ? 1 : 0, pb.is_pullback_50 ? 1 : 0,
+        pb.has_distribution_day ? 1 : 0, pb.is_pullback_21_ema ? 1 : 0, pb.is_pullback_50 ? 1 : 0,
         vcp.pivot_price, vcp.pivot_distance_pct, vcp.is_near_pivot ? 1 : 0, vcp.is_pivot_breakout ? 1 : 0, vcp.is_handle_healthy ? 1 : 0,
         vcp.atr_10, vcp.atr_50, vcp.atr_contraction_ratio, vcp.is_volatility_contracted ? 1 : 0,
         vcp.volume_5d_avg, vcp.volume_50d_avg, vcp.volume_dryup_ratio, vcp.is_volume_dryup ? 1 : 0,

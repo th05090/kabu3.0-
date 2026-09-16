@@ -72,7 +72,7 @@ export function SepaPriceChart({ quotes, pivotPrice, baseHigh }: SepaPriceChartP
       }))
     );
 
-    // 2. 移動平均線 (SMA 50, 150, 200)
+    // 2. 移動平均線 (21 EMA, 50 SMA, 150 SMA, 200 SMA)
     const calcSma = (period: number) => {
       const smaData: { time: string; value: number }[] = [];
       for (let i = period - 1; i < sorted.length; i++) {
@@ -83,14 +83,31 @@ export function SepaPriceChart({ quotes, pivotPrice, baseHigh }: SepaPriceChartP
       return smaData;
     };
 
-    // 25日SMA (紫 / 短期サポートライン)
-    if (sorted.length >= 25) {
-      const sma25Series = chart.addSeries(LineSeries, {
+    const calcEma = (period: number) => {
+      const emaData: { time: string; value: number }[] = [];
+      if (sorted.length < period) return emaData;
+      const k = 2 / (period + 1);
+      let ema = 0;
+      for (let i = 0; i < period; i++) {
+        ema += sorted[i].close;
+      }
+      ema /= period;
+      emaData.push({ time: sorted[period - 1].date, value: Math.round(ema * 10) / 10 });
+      for (let i = period; i < sorted.length; i++) {
+        ema = sorted[i].close * k + ema * (1 - k);
+        emaData.push({ time: sorted[i].date, value: Math.round(ema * 10) / 10 });
+      }
+      return emaData;
+    };
+
+    // 21日EMA (紫 / 短期モメンタムサポート)
+    if (sorted.length >= 21) {
+      const ema21Series = chart.addSeries(LineSeries, {
         color: '#a855f7',
         lineWidth: 2,
-        title: '25 SMA',
+        title: '21 EMA',
       });
-      sma25Series.setData(calcSma(25));
+      ema21Series.setData(calcEma(21));
     }
 
     // 50日SMA (緑)

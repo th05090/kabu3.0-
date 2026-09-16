@@ -167,9 +167,9 @@ export const SectorDetailDrawer: React.FC<SectorDetailDrawerProps> = ({ sector, 
                           🚀 直近ブレイク
                         </span>
                       )}
-                      {badge.badgeType === 'pullback_25' && (
-                        <span className="stock-pullback-badge badge-pullback-25">
-                          ★ 25MA押し目
+                      {badge.badgeType === 'pullback_21' && (
+                        <span className="stock-pullback-badge badge-pullback-21">
+                          ★ 21EMA押し目
                         </span>
                       )}
                       {badge.badgeType === 'pullback_50' && (

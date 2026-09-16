@@ -1,12 +1,12 @@
-import { RawDailyQuote } from './trend_calculator';
+import { RawDailyQuote, calculateEma } from './trend_calculator';
 import { SepaPullbackMetrics } from '../../features/sepa/types/sepa';
 
 /**
- * ミネルヴィニ流プルバック（25日・50日SMA押し目 & ブレイク後押し目）を判定
+ * ミネルヴィニ流プルバック（21日EMA・50日SMA押し目 & ブレイク後押し目）を判定
  */
 export function calculateSepaPullback(
   quotes: RawDailyQuote[],
-  sma25: number | null,
+  ema21: number | null,
   sma50: number | null,
   sma200: number | null,
   isTrendStructuralPass: boolean,
@@ -20,7 +20,7 @@ export function calculateSepaPullback(
     min_volume_5d: null,
     min_vdu_ratio: null,
     has_distribution_day: false,
-    is_pullback_25: false,
+    is_pullback_21_ema: false,
     is_pullback_50: false,
     has_breakout_prior: false,
     days_since_breakout: null,
@@ -29,7 +29,7 @@ export function calculateSepaPullback(
     pullback_from_breakout_high_pct: null,
   };
 
-  if (!quotes || quotes.length < 25 || !sma25 || !sma50) return defaultRes;
+  if (!quotes || quotes.length < 21 || !ema21 || !sma50) return defaultRes;
 
   const currentPrice = quotes[0].adj_close;
   const vol50Avg = volume50dAvg && volume50dAvg > 0 ? volume50dAvg : 1;
@@ -101,26 +101,28 @@ export function calculateSepaPullback(
     !is200MaBroken;
 
   if (commonPass) {
-    // 25日SMAの傾き (5日前の25SMAと比較)
-    let isSma25Rising = true;
-    if (quotes.length >= 30) {
-      const sma25_5dAgo = quotes.slice(5, 30).reduce((a, q) => a + q.adj_close, 0) / 25;
-      isSma25Rising = sma25 >= sma25_5dAgo * 0.995;
+    // 21日EMAの傾き (5日前の21EMAと比較)
+    let isEma21Rising = true;
+    if (quotes.length >= 26) {
+      const ema21_5dAgo = calculateEma(quotes.slice(5), 21);
+      if (ema21 != null && ema21_5dAgo != null) {
+        isEma21Rising = ema21 >= ema21_5dAgo * 0.995;
+      }
     }
 
-    const dist25 = ((currentPrice - sma25) / sma25) * 100;
-    const highAbove25 = ((swingHigh20d - sma25) / sma25) * 100;
+    const dist21 = ((currentPrice - ema21) / ema21) * 100;
+    const highAbove21 = ((swingHigh20d - ema21) / ema21) * 100;
 
-    // 【25日SMA押し目】
+    // 【21日EMA押し目 (強勢浅押し)】
     if (
-      isSma25Rising &&
-      highAbove25 >= 3.5 &&
+      isEma21Rising &&
+      highAbove21 >= 3.5 &&
       pullbackDepthPct <= -3.0 &&
       pullbackDepthPct >= -12.0 &&
-      dist25 >= -1.5 &&
-      dist25 <= 3.5
+      dist21 >= -1.5 &&
+      dist21 <= 3.5
     ) {
-      defaultRes.is_pullback_25 = true;
+      defaultRes.is_pullback_21_ema = true;
     }
 
     // 【50日SMA押し目】
@@ -135,7 +137,7 @@ export function calculateSepaPullback(
     }
 
     // 7. 過去3〜30営業日前の前提ブレイクアウト探索 (真のブレイク防衛ロジック適用)
-    if (defaultRes.is_pullback_25 || defaultRes.is_pullback_50) {
+    if (defaultRes.is_pullback_21_ema || defaultRes.is_pullback_50) {
       for (let t_bo = 3; t_bo <= 30; t_bo++) {
         if (t_bo >= quotes.length - 50) break;
         const boDay = quotes[t_bo];
@@ -173,7 +175,7 @@ export function calculateSepaPullback(
         // 【防衛4: 押し目の健全な深さ】
         const postBoHigh = Math.max(...quotes.slice(0, t_bo + 1).map(q => q.adj_high));
         const pullbackFromBoHigh = postBoHigh > 0 ? ((currentPrice - postBoHigh) / postBoHigh) * 100 : 0;
-        const isDepthValid = defaultRes.is_pullback_25 ? pullbackFromBoHigh >= -12.0 : pullbackFromBoHigh >= -20.0;
+        const isDepthValid = defaultRes.is_pullback_21_ema ? pullbackFromBoHigh >= -12.0 : pullbackFromBoHigh >= -20.0;
 
         if (isDepthValid) {
           defaultRes.has_breakout_prior = true;

@@ -64,14 +64,14 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
             Stage2 + コア成長 (Tier 1)
           </button>
 
-          {/* 2. ★ Stage2 + 25日押し目 (紫/メイン) */}
+          {/* 2. ★ Stage2 + 21EMA押し目 (紫/メイン) */}
           <button
-            onClick={() => handleModeChange('stage2_pullback_25')}
-            className={`sepa-chip ${mode === 'stage2_pullback_25' ? 'active-purple' : ''}`}
-            title="構造的Stage 2（RS>=75）かつ 25日SMAサポート押し目（直近高値から調整 -3%〜-12%、乖離 -1.5%〜+3.5%、出来高枯渇）"
+            onClick={() => handleModeChange('stage2_pullback_21_ema')}
+            className={`sepa-chip ${mode === 'stage2_pullback_21_ema' ? 'active-purple' : ''}`}
+            title="構造的Stage 2（RS>=75）かつ 21日EMAサポート押し目（直近高値から調整 -3%〜-12%、乖離 -1.5%〜+3.5%、出来高枯渇）"
           >
             <Sparkles size={14} />
-            ★ Stage2 + 25日押し目
+            ★ Stage2 + 21EMA押し目
           </button>
 
           {/* 3. Stage2 + 50日押し目 (シアン/サブ) */}
@@ -161,10 +161,10 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
         {/* 左: 銘柄一覧テーブル */}
         <div className="sepa-table-wrapper" style={{ minWidth: 0 }}>
           {(() => {
-            const isPullback25 = mode === 'stage2_pullback_25';
+            const isPullback21Ema = mode === 'stage2_pullback_21_ema' || mode === 'stage2_pullback_25';
             const isPullback50 = mode === 'stage2_pullback_50';
             const isBreakoutPullback = mode === 'breakout_pullback';
-            const isPullback = isPullback25 || isPullback50;
+            const isPullback = isPullback21Ema || isPullback50;
 
             return (
               <table className="sepa-table">
@@ -178,7 +178,7 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                     </SepaSortHeader>
                     {isBreakoutPullback ? (
                       <>
-                        <SepaSortHeader field="dist_sma25_pct" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                        <SepaSortHeader field="dist_ema21_pct" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
                           MA乖離
                         </SepaSortHeader>
                         <SepaSortHeader field="days_since_breakout" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
@@ -193,8 +193,8 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                       </>
                     ) : isPullback ? (
                       <>
-                        <SepaSortHeader field={isPullback25 ? "dist_sma25_pct" : "dist_sma50_pct"} currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
-                          {isPullback25 ? '25日線乖離' : '50日線乖離'}
+                        <SepaSortHeader field={isPullback21Ema ? "dist_ema21_pct" : "dist_sma50_pct"} currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
+                          {isPullback21Ema ? '21EMA乖離' : '50日線乖離'}
                         </SepaSortHeader>
                         <SepaSortHeader field="pullback_depth_pct" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right">
                           押し幅
@@ -288,9 +288,9 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                               {/* MA乖離 & サポート種別 */}
                               <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, whiteSpace: 'nowrap' }}>
                                 {(() => {
-                                  const is25 = Boolean(s.is_pullback_25);
-                                  const dist = is25 ? s.dist_sma25_pct : s.dist_sma50_pct;
-                                  const sma = is25 ? s.sma_25 : s.sma_50;
+                                  const is21 = Boolean(s.is_pullback_21_ema);
+                                  const dist = is21 ? s.dist_ema21_pct : s.dist_sma50_pct;
+                                  const maVal = is21 ? s.ema_21 : s.sma_50;
                                   if (dist == null) return '---';
                                   const color = dist <= 0 ? '#34d399' : '#38bdf8';
                                   return (
@@ -300,20 +300,20 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                                           fontSize: '0.62rem',
                                           padding: '0.08rem 0.3rem',
                                           borderRadius: '4px',
-                                          background: is25 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(6, 182, 212, 0.2)',
-                                          border: is25 ? '1px solid rgba(168, 85, 247, 0.4)' : '1px solid rgba(6, 182, 212, 0.4)',
-                                          color: is25 ? '#c084fc' : '#22d3ee',
+                                          background: is21 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(6, 182, 212, 0.2)',
+                                          border: is21 ? '1px solid rgba(168, 85, 247, 0.4)' : '1px solid rgba(6, 182, 212, 0.4)',
+                                          color: is21 ? '#c084fc' : '#22d3ee',
                                           fontWeight: 700,
                                           whiteSpace: 'nowrap'
                                         }}>
-                                          {is25 ? '★ 25MA' : '50MA'}
+                                          {is21 ? '★ 21EMA' : '50MA'}
                                         </span>
                                         <span style={{ color, fontWeight: 700 }}>
                                           {dist > 0 ? `+${dist.toFixed(1)}%` : `${dist.toFixed(1)}%`}
                                         </span>
                                       </div>
                                       <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.1rem' }}>
-                                        {sma ? `${sma.toLocaleString()}円` : ''}
+                                        {maVal ? `${maVal.toLocaleString()}円` : ''}
                                       </div>
                                     </div>
                                   );
@@ -375,8 +375,8 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                             <>
                               <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
                                 {(() => {
-                                  const dist = isPullback25 ? s.dist_sma25_pct : s.dist_sma50_pct;
-                                  const sma = isPullback25 ? s.sma_25 : s.sma_50;
+                                  const dist = isPullback21Ema ? s.dist_ema21_pct : s.dist_sma50_pct;
+                                  const maVal = isPullback21Ema ? s.ema_21 : s.sma_50;
                                   if (dist == null) return '---';
                                   const color = dist <= 0 ? '#34d399' : '#38bdf8';
                                   return (
@@ -385,7 +385,7 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                                         {dist > 0 ? `+${dist.toFixed(1)}%` : `${dist.toFixed(1)}%`}
                                       </span>
                                       <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
-                                        {sma ? `${sma.toLocaleString()}円` : ''}
+                                        {maVal ? `${maVal.toLocaleString()}円` : ''}
                                       </div>
                                     </div>
                                   );
@@ -487,8 +487,8 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                   <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.2rem' }}>
                     {mode === 'breakout_pullback' ? (
                       <>
-                        種別: <span style={{ color: diagnostics.metrics.is_pullback_25 ? '#c084fc' : '#22d3ee', fontWeight: 700 }}>
-                          {diagnostics.metrics.is_pullback_25 ? '★ 25日押し目' : '50日押し目'}
+                        種別: <span style={{ color: diagnostics.metrics.is_pullback_21_ema ? '#c084fc' : '#22d3ee', fontWeight: 700 }}>
+                          {diagnostics.metrics.is_pullback_21_ema ? '★ 21EMA押し目' : '50日押し目'}
                         </span> | 
                         ブレイク: <span style={{ color: '#fbbf24', fontWeight: 600 }}>
                           {diagnostics.metrics.days_since_breakout != null ? `${diagnostics.metrics.days_since_breakout}日前 (${diagnostics.metrics.breakout_date})` : '---'}
@@ -497,8 +497,8 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                           {diagnostics.metrics.pullback_from_breakout_high_pct != null ? `${diagnostics.metrics.pullback_from_breakout_high_pct}%` : '---'}
                         </span> | 
                         MA乖離: <span style={{ color: '#38bdf8', fontWeight: 700 }}>
-                          {diagnostics.metrics.is_pullback_25 
-                            ? `${diagnostics.metrics.dist_sma25_pct != null && diagnostics.metrics.dist_sma25_pct > 0 ? '+' : ''}${diagnostics.metrics.dist_sma25_pct?.toFixed(1)}% (25MA)`
+                          {diagnostics.metrics.is_pullback_21_ema 
+                            ? `${diagnostics.metrics.dist_ema21_pct != null && diagnostics.metrics.dist_ema21_pct > 0 ? '+' : ''}${diagnostics.metrics.dist_ema21_pct?.toFixed(1)}% (21EMA)`
                             : `${diagnostics.metrics.dist_sma50_pct != null && diagnostics.metrics.dist_sma50_pct > 0 ? '+' : ''}${diagnostics.metrics.dist_sma50_pct?.toFixed(1)}% (50MA)`}
                         </span> | 
                         枯渇比: <span style={{ color: '#818cf8', fontWeight: 600 }}>
@@ -506,12 +506,12 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
                         </span> | 
                         RS: <span style={{ color: '#34d399', fontWeight: 700 }}>{diagnostics.metrics.rs_rating}</span>
                       </>
-                    ) : mode === 'stage2_pullback_25' || mode === 'stage2_pullback_50' ? (
+                    ) : mode === 'stage2_pullback_21_ema' || mode === 'stage2_pullback_25' || mode === 'stage2_pullback_50' ? (
                       <>
                         20日高値: <span style={{ color: '#f97316', fontWeight: 600 }}>{diagnostics.metrics.swing_high_20d ? `${diagnostics.metrics.swing_high_20d.toLocaleString()}円` : '---'}</span> | 
                         押し幅: <span style={{ color: '#fbbf24', fontWeight: 600 }}>{diagnostics.metrics.pullback_depth_pct != null ? `${diagnostics.metrics.pullback_depth_pct.toFixed(1)}%` : '---'}</span> | 
-                        {mode === 'stage2_pullback_25' ? (
-                          <>25日SMA: <span style={{ color: '#a855f7', fontWeight: 700 }}>{diagnostics.metrics.sma_25 ? `${diagnostics.metrics.sma_25.toLocaleString()}円` : '---'} ({diagnostics.metrics.dist_sma25_pct != null ? `${diagnostics.metrics.dist_sma25_pct > 0 ? '+' : ''}${diagnostics.metrics.dist_sma25_pct.toFixed(1)}%` : '---'})</span> | </>
+                        {mode === 'stage2_pullback_21_ema' || mode === 'stage2_pullback_25' ? (
+                          <>21日EMA: <span style={{ color: '#a855f7', fontWeight: 700 }}>{diagnostics.metrics.ema_21 ? `${diagnostics.metrics.ema_21.toLocaleString()}円` : '---'} ({diagnostics.metrics.dist_ema21_pct != null ? `${diagnostics.metrics.dist_ema21_pct > 0 ? '+' : ''}${diagnostics.metrics.dist_ema21_pct.toFixed(1)}%` : '---'})</span> | </>
                         ) : (
                           <>50日SMA: <span style={{ color: '#06b6d4', fontWeight: 700 }}>{diagnostics.metrics.sma_50 ? `${diagnostics.metrics.sma_50.toLocaleString()}円` : '---'} ({diagnostics.metrics.dist_sma50_pct != null ? `${diagnostics.metrics.dist_sma50_pct > 0 ? '+' : ''}${diagnostics.metrics.dist_sma50_pct.toFixed(1)}%` : '---'})</span> | </>
                         )}

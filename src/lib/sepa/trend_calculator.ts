@@ -46,6 +46,28 @@ function calculateSma(quotes: RawDailyQuote[], period: number): number | null {
 }
 
 /**
+ * 指数平滑移動平均 (EMA) 算出
+ * quotes は最新日降順 (0が最新)
+ * 過去から現在に向けて蓄積計算
+ */
+export function calculateEma(quotes: RawDailyQuote[], period: number): number | null {
+  if (quotes.length < period) return null;
+  const asc = quotes.slice().reverse();
+  const k = 2 / (period + 1);
+
+  let ema = 0;
+  for (let i = 0; i < period; i++) {
+    ema += asc[i].adj_close;
+  }
+  ema /= period;
+
+  for (let i = period; i < asc.length; i++) {
+    ema = asc[i].adj_close * k + ema * (1 - k);
+  }
+  return ema;
+}
+
+/**
  * ミネルヴィニ・トレンドテンプレート8条件およびIPOバイパスを計算
  */
 export function calculateSepaTrend(quotes: RawDailyQuote[]): SepaTrendMetrics {
@@ -53,10 +75,12 @@ export function calculateSepaTrend(quotes: RawDailyQuote[]): SepaTrendMetrics {
   const defaultRes: SepaTrendMetrics = {
     current_price: 0,
     sma_25: null,
+    ema_21: null,
     sma_50: null,
     sma_150: null,
     sma_200: null,
     dist_sma25_pct: null,
+    dist_ema21_pct: null,
     dist_sma50_pct: null,
     is_above_sma_50: false,
     is_above_sma_150: false,
@@ -86,19 +110,24 @@ export function calculateSepaTrend(quotes: RawDailyQuote[]): SepaTrendMetrics {
   const isIpo = quotes.length < 250;
   defaultRes.is_ipo = isIpo;
 
-  // 2. 移動平均線の算出 (25日, 50日, 150日, 200日)
+  // 2. 移動平均線の算出 (25日SMA, 21日EMA, 50日SMA, 150日SMA, 200日SMA)
   const sma25 = calculateSma(quotes, 25);
+  const ema21 = calculateEma(quotes, 21);
   const sma50 = calculateSma(quotes, 50);
   const sma150 = calculateSma(quotes, 150);
   const sma200 = calculateSma(quotes, 200);
 
   defaultRes.sma_25 = sma25;
+  defaultRes.ema_21 = ema21;
   defaultRes.sma_50 = sma50;
   defaultRes.sma_150 = sma150;
   defaultRes.sma_200 = sma200;
 
   if (sma25 != null && sma25 > 0) {
     defaultRes.dist_sma25_pct = ((currentPrice - sma25) / sma25) * 100;
+  }
+  if (ema21 != null && ema21 > 0) {
+    defaultRes.dist_ema21_pct = ((currentPrice - ema21) / ema21) * 100;
   }
   if (sma50 != null && sma50 > 0) {
     defaultRes.dist_sma50_pct = ((currentPrice - sma50) / sma50) * 100;

@@ -40,7 +40,7 @@ export interface RawStockMetricData {
   rsRank: number;
   rsRankPast: number | null; // 期間前のRSランク
   isBreakoutRecent: boolean; // 直近5日以内ブレイク
-  pullbackType: 'NONE' | 'PULLBACK_25MA' | 'PULLBACK_50MA';
+  pullbackType: 'NONE' | 'PULLBACK_21EMA' | 'PULLBACK_50MA';
   isBounceTriggered: boolean;
 }
 

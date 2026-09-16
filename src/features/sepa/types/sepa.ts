@@ -17,10 +17,12 @@ export type QuarterlyGrowthStatus =
 export interface SepaTrendMetrics {
   current_price: number;
   sma_25: number | null;
+  ema_21: number | null;
   sma_50: number | null;
   sma_150: number | null;
   sma_200: number | null;
   dist_sma25_pct: number | null;
+  dist_ema21_pct: number | null;
   dist_sma50_pct: number | null;
   is_above_sma_50: boolean;
   is_above_sma_150: boolean;
@@ -96,7 +98,7 @@ export interface SepaPullbackMetrics {
   min_volume_5d: number | null;      // 直近5営業日の最小出来高
   min_vdu_ratio: number | null;      // min_volume_5d / volume_50d_avg (出来高枯渇比)
   has_distribution_day: boolean;     // 直近5営業日に大商い下落日 (出来高>=1.5倍) があるか
-  is_pullback_25: boolean;           // 25日SMA押し目合格フラグ (強モメンタム浅押し)
+  is_pullback_21_ema: boolean;       // 21日EMA押し目合格フラグ (強モメンタム浅押し)
   is_pullback_50: boolean;           // 50日SMA押し目合格フラグ (機関投資家本格押し)
   has_breakout_prior: boolean;       // 過去3〜25営業日前のブレイク履歴有無
   days_since_breakout: number | null; // ブレイクアウトからの経過営業日数
