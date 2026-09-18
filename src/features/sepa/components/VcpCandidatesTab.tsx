@@ -5,7 +5,7 @@ import { useSepaVcp, useSepaDiagnostics } from '../hooks/useSepa';
 import { SepaPriceChart } from './SepaPriceChart';
 import { SepaSortHeader } from './SepaSortHeader';
 import { Tier2ScoreBadges } from './Tier2ScoreBadges';
-import { Target, Activity, ExternalLink, CheckCircle2, Building2, Sparkles, Rocket } from 'lucide-react';
+import { Target, Activity, ExternalLink, CheckCircle2, Building2, Sparkles, Rocket, ChevronLeft, ChevronRight } from 'lucide-react';
 import { SepaStockRecord } from '../types/sepa';
 import { GICS_DICTIONARY } from '@/data/gics_dictionary';
 
@@ -24,7 +24,7 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
 
-  const { candidates, total, isLoading } = useSepaVcp(mode, page, 50, sortBy, order, excludeEtf, sweetSpotCap, minLiquidity, midLargeCap);
+  const { candidates, total, totalPages, isLoading } = useSepaVcp(mode, page, 50, sortBy, order, excludeEtf, sweetSpotCap, minLiquidity, midLargeCap);
   const { diagnostics, isLoading: diagLoading } = useSepaDiagnostics(selectedTicker);
 
   const handleSort = (field: string) => {
@@ -150,9 +150,32 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
           </button>
         </div>
 
-        <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-          該当: <span style={{ color: '#fff', fontWeight: 'bold' }}>{total.toLocaleString()}</span> 件
-          <span style={{ color: '#64748b', marginLeft: '0.5rem' }}>(クリックでチャート即時展開)</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+            該当: <span style={{ color: '#fff', fontWeight: 'bold' }}>{total.toLocaleString()}</span> 件
+            <span style={{ color: '#64748b', marginLeft: '0.5rem' }}>(クリックでチャート即時展開)</span>
+          </div>
+          {totalPages > 1 && (
+            <div className="sepa-pagination" style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+              <span>{page} / {totalPages} ページ</span>
+              <button
+                disabled={page <= 1 || isLoading}
+                onClick={() => setPage(p => p - 1)}
+                className="sepa-page-btn"
+                title="前のページ"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <button
+                disabled={page >= totalPages || isLoading}
+                onClick={() => setPage(p => p + 1)}
+                className="sepa-page-btn"
+                title="次のページ"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -462,6 +485,33 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
               </table>
             );
           })()}
+
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0.5rem 0.25rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                {(page - 1) * 50 + 1} - {Math.min(page * 50, total)} 件 / 全 {total} 件
+              </span>
+              <div className="sepa-pagination" style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                <span>{page} / {totalPages} ページ</span>
+                <button
+                  disabled={page <= 1 || isLoading}
+                  onClick={() => setPage(p => p - 1)}
+                  className="sepa-page-btn"
+                  title="前のページ"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <button
+                  disabled={page >= totalPages || isLoading}
+                  onClick={() => setPage(p => p + 1)}
+                  className="sepa-page-btn"
+                  title="次のページ"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 右: 目視チャートプレビュー */}
