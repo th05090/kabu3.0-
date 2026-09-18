@@ -112,7 +112,7 @@ export function TrendTemplateTab({ onSelectTicker }: TrendTemplateTabProps) {
       <div className="sepa-table-meta">
         <div>
           該当銘柄数: <span style={{ fontWeight: 'bold', color: '#fff' }}>{total.toLocaleString()}</span> 件
-          {filter === 'tier1' && <span style={{ marginLeft: '0.5rem', color: '#34d399', fontWeight: 600 }}>(Stage 2 + コア成長 Tier 1 適合銘柄)</span>}
+          {filter === 'tier1' && <span style={{ marginLeft: '0.5rem', color: '#34d399', fontWeight: 600 }}>(Stage 2 ＋ 好業績 Tier 1 適合銘柄)</span>}
           {filter === 'all_pass' && <span style={{ marginLeft: '0.5rem', color: '#60a5fa', fontWeight: 600 }}>(Stage 2 上昇トレンド確定銘柄)</span>}
         </div>
         <div className="sepa-pagination">

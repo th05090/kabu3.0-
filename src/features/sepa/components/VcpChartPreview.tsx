@@ -65,7 +65,7 @@ export function VcpChartPreview({
               {mode === 'breakout_pullback' ? (
                 <>
                   種別: <span style={{ color: metrics.is_pullback_21_ema ? '#c084fc' : '#22d3ee', fontWeight: 700 }}>
-                    {metrics.is_pullback_21_ema ? '★ 21EMA押し目' : '50日押し目'}
+                    {metrics.is_pullback_21_ema ? '21EMA押し目' : '50日押し目'}
                   </span> | 
                   ブレイク: <span style={{ color: '#fbbf24', fontWeight: 600 }}>
                     {metrics.days_since_breakout != null ? `${metrics.days_since_breakout}日前 (${metrics.breakout_date})` : '---'}

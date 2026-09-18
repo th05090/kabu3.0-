@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useSepaVcp, useSepaDiagnostics } from '../hooks/useSepa';
 import { VcpCandidatesTable } from './VcpCandidatesTable';
 import { VcpChartPreview } from './VcpChartPreview';
-import { Activity, CheckCircle2, Building2, Sparkles, Rocket, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Activity, CheckCircle2, Building2, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface VcpCandidatesTabProps {
   onSelectTicker: (ticker: string) => void;
@@ -61,47 +61,47 @@ export function VcpCandidatesTab({ onSelectTicker }: VcpCandidatesTabProps) {
       {/* モード切替バー */}
       <div className="sepa-filter-box" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="sepa-btn-group">
-          {/* 1. Stage2 + コア成長 (Tier 1) */}
+          {/* 1. Stage 2 ＋ 好業績（売上10%・EPS20%↑） */}
           <button
             onClick={() => handleModeChange('strict_funda')}
             className={`sepa-chip ${mode === 'strict_funda' ? 'active-emerald' : ''}`}
-            title="Stage 2（RS>=80）かつ 直近四半期EPS+20%以上（または黒字転換）かつ 直近四半期売上+10%以上のコア成長株"
+            title="Stage 2（RS>=80）かつ 直近四半期EPS+20%以上（または黒字転換）かつ 直近四半期売上+10%以上のコア好業績株"
           >
             <CheckCircle2 size={14} />
-            Stage2 + コア成長 (Tier 1)
+            Stage 2 ＋ 好業績 (Tier 1)
           </button>
 
-          {/* 2. ★ Stage2 + 21EMA押し目 (紫/メイン) */}
+          {/* 2. Stage 2 ＋ 21EMAプルバック（浅い押し目） */}
           <button
             onClick={() => handleModeChange('stage2_pullback_21_ema')}
             className={`sepa-chip ${mode === 'stage2_pullback_21_ema' ? 'active-purple' : ''}`}
             title="構造的Stage 2（RS>=75）かつ 21日EMAサポート押し目（直近高値から調整 -3%〜-12%、乖離 -1.5%〜+3.5%、出来高枯渇）"
           >
-            <Sparkles size={14} />
-            ★ Stage2 + 21EMA押し目
+            <TrendingUp size={14} />
+            Stage 2 ＋ 21EMA押し目
           </button>
 
-          {/* 3. Stage2 + 50日押し目 (シアン/サブ) */}
+          {/* 3. Stage 2 ＋ 50日線プルバック（基盤押し目） */}
           <button
             onClick={() => handleModeChange('stage2_pullback_50')}
             className={`sepa-chip ${mode === 'stage2_pullback_50' ? 'active-cyan' : ''}`}
             title="構造的Stage 2（RS>=75）かつ 50日SMAサポート押し目（直近高値から調整 -5%〜-20%、乖離 -2.0%〜+3.5%、出来高枯渇）"
           >
-            <Sparkles size={14} />
-            Stage2 + 50日押し目
+            <TrendingUp size={14} />
+            Stage 2 ＋ 50日線押し目
           </button>
 
-          {/* 4. 🚀 ブレイク後押し目 (アンバー/新設) */}
+          {/* 4. ブレイク後ファースト・プルバック */}
           <button
             onClick={() => handleModeChange('breakout_pullback')}
             className={`sepa-chip ${mode === 'breakout_pullback' ? 'active-amber' : ''}`}
-            title="過去3〜25営業日前に出来高急増でブレイクアウトし、現在25日線または50日線で健全な押し目を形成している銘柄 (RS>=75)"
+            title="過去3〜25営業日前に出来高急増でブレイクアウトし、現在21日EMAまたは50日線で健全な初回押し目を形成している銘柄 (RS>=75)"
           >
-            <Rocket size={14} />
-            🚀 ブレイク後押し目
+            <TrendingUp size={14} />
+            ブレイク後初回押し目
           </button>
 
-          {/* 5. 全VCP候補 (アンバー) */}
+          {/* 5. 全VCP候補 */}
           <button
             onClick={() => handleModeChange('all')}
             className={`sepa-chip ${mode === 'all' ? 'active-amber' : ''}`}

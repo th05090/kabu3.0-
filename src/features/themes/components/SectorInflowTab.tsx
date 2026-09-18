@@ -150,11 +150,11 @@ export const SectorInflowTab: React.FC = () => {
           <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginRight: '0.25rem' }}>状態絞込:</span>
           {[
             { id: 'ALL', label: 'すべて' },
-            { id: 'SUPER', label: '🔥 強烈な資金流入' },
-            { id: 'EARLY', label: '📈 資金流入の初期兆候' },
-            { id: 'LAGGING', label: '📈 上昇（市場劣後）' },
-            { id: 'DEFENSIVE', label: '⚖ 相対優位（地合い不良）' },
-            { id: 'OUTFLOW', label: '📉 資金流出傾向' },
+            { id: 'SUPER', label: '資金集中（市場超過・上昇）' },
+            { id: 'EARLY', label: '資金流入（初動シグナル）' },
+            { id: 'LAGGING', label: 'セクター上昇（指数劣後）' },
+            { id: 'DEFENSIVE', label: '相対優位（下落耐性 / 防衛的）' },
+            { id: 'OUTFLOW', label: '資金流出傾向（商い縮小）' },
           ].map((item) => (
             <button
               key={item.id}

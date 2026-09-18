@@ -80,7 +80,7 @@ export function VcpCandidateRow({ stock: s, isSelected, mode, onSelect }: VcpCan
                       fontWeight: 700,
                       whiteSpace: 'nowrap'
                     }}>
-                      {is21 ? '★ 21EMA' : '50MA'}
+                      {is21 ? '21EMA' : '50MA'}
                     </span>
                     <span style={{ color, fontWeight: 700 }}>
                       {dist > 0 ? `+${dist.toFixed(1)}%` : `${dist.toFixed(1)}%`}

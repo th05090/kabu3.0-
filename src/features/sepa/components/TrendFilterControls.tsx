@@ -71,10 +71,10 @@ export function TrendFilterControls({
           <button
             onClick={() => setFilter('tier1')}
             className={`sepa-chip ${filter === 'tier1' ? 'active-emerald' : ''}`}
-            title="Stage 2（8条件）かつ 直近四半期EPS+20%以上（または黒字転換）かつ 直近四半期売上+10%以上のコア成長株"
+            title="Stage 2（8条件）かつ 直近四半期EPS+20%以上（または黒字転換）かつ 直近四半期売上+10%以上のコア好業績株"
           >
             <Sparkles size={13} />
-            ★ Stage 2 + コア成長 (Tier 1)
+            Stage 2 ＋ 好業績 (Tier 1)
           </button>
           <button
             onClick={() => setFilter('all_pass')}

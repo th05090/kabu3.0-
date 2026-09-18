@@ -107,21 +107,21 @@ export function getSectorStatusBadge(
   if (finalScore >= 80) {
     if (equalWeightReturn > 0 && rsDelta > 0) {
       return {
-        label: '🔥 強烈な資金流入',
+        label: '資金集中（市場超過・上昇）',
         variant: 'super',
         description: 'セクター上昇 ＆ TOPIXアウトパフォームの完全合致',
       };
     }
     if (equalWeightReturn > 0 && rsDelta <= 0) {
       return {
-        label: '📈 上昇（市場劣後）',
+        label: 'セクター上昇（指数劣後）',
         variant: 'lagging',
         description: '業種自体は上昇しているが、市場全体の急騰にモメンタムが劣後',
       };
     }
     // equalWeightReturn <= 0
     return {
-      label: '⚖ 相対優位（地合い不良）',
+      label: '相対優位（下落耐性 / 防衛的）',
       variant: 'defensive',
       description: 'セクター自体は下落しているが、相対的な下げ渋り・ディフェンシブ優位',
     };
@@ -131,13 +131,13 @@ export function getSectorStatusBadge(
   if (finalScore >= 65) {
     if (equalWeightReturn > 0 && rsDelta > 0) {
       return {
-        label: '📈 資金流入の初期兆候',
+        label: '資金流入（初動シグナル）',
         variant: 'early',
         description: '商い・先行銘柄・相対モメンタムに資金集約の初期サイン',
       };
     }
     return {
-      label: '⚖ 中立（流入兆候あり）',
+      label: '中立（流入兆候あり）',
       variant: 'neutral',
       description: '指標の一部に流入兆候があるが、市場対比または方向性が未定着',
     };
@@ -146,7 +146,7 @@ export function getSectorStatusBadge(
   // 3. 中立帯 (45点〜64点)
   if (finalScore >= 45) {
     return {
-      label: '⚖ 中立',
+      label: '中立（市場平均並み）',
       variant: 'neutral',
       description: '市場平均並みの通常の推移',
     };
@@ -154,7 +154,7 @@ export function getSectorStatusBadge(
 
   // 4. 流出帯 (44点以下)
   return {
-    label: '📉 資金流出傾向',
+    label: '資金流出傾向（商い縮小）',
     variant: 'outflow',
     description: '商い縮小・ディストリビューション傾向',
   };
@@ -170,43 +170,43 @@ export function resolveStockBadge(params: {
 }): StockPullbackBadgeInfo {
   const { pullbackType, isBounceTriggered, isRecentBreakout } = params;
 
-  // [優先度 1] 🔥 反発トリガー
+  // [優先度 1] 反発確認（前日高値上抜け）
   if ((pullbackType === 'PULLBACK_21EMA' || pullbackType === 'PULLBACK_50MA') && isBounceTriggered) {
     return {
       priority: 1,
-      label: '🔥 反発トリガー',
+      label: '反発確認（前日高値上抜け）',
       badgeType: 'trigger',
-      description: '押し目からの反発を確認（エントリー検討候補）',
+      description: '支持帯からの反発を確認（前日高値突破）',
     };
   }
 
-  // [優先度 2] 🚀 直近ブレイク（5日以内）
+  // [優先度 2] ブレイクアウト（直近5日以内）
   if (isRecentBreakout) {
     return {
       priority: 2,
-      label: '🚀 直近ブレイク',
+      label: 'ブレイクアウト（5日以内）',
       badgeType: 'breakout',
       description: '直近5営業日以内にベース新高値ブレイクアウト発生',
     };
   }
 
-  // [優先度 3] ★ 21EMA押し目
+  // [優先度 3] 21EMA支持帯（調整中）
   if (pullbackType === 'PULLBACK_21EMA') {
     return {
       priority: 3,
-      label: '★ 21EMA押し目',
+      label: '21EMA支持帯（調整中）',
       badgeType: 'pullback_21',
-      description: '21EMA支持帯テスト中（反発監視対象）',
+      description: '21EMA支持帯テスト中（出来高枯渇・反発監視）',
     };
   }
 
-  // [優先度 4] ★ 50MA押し目
+  // [優先度 4] 50日線支持帯（調整中）
   if (pullbackType === 'PULLBACK_50MA') {
     return {
       priority: 4,
-      label: '★ 50MA押し目',
+      label: '50日線支持帯（調整中）',
       badgeType: 'pullback_50',
-      description: '50MA支持帯テスト中（反発監視対象）',
+      description: '50MA支持帯テスト中（出来高枯渇・反発監視）',
     };
   }
 
