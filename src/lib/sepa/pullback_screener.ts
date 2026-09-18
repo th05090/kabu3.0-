@@ -1,4 +1,4 @@
-import { RawDailyQuote, calculateEma } from './trend_calculator';
+import { RawDailyQuote, calculateEma, calculateTrimmedVolume50d } from './trend_calculator';
 import { SepaPullbackMetrics } from '../../features/sepa/types/sepa';
 
 /**
@@ -32,7 +32,9 @@ export function calculateSepaPullback(
   if (!quotes || quotes.length < 21 || !ema21 || !sma50) return defaultRes;
 
   const currentPrice = quotes[0].adj_close;
-  const vol50Avg = volume50dAvg && volume50dAvg > 0 ? volume50dAvg : 1;
+  // トリム50日平均出来高（上位3日除外・配列長ガード付き）を実力出来高基準として採用
+  const trimmedVol50 = calculateTrimmedVolume50d(quotes, 0);
+  const vol50Avg = trimmedVol50 > 0 ? trimmedVol50 : (volume50dAvg && volume50dAvg > 0 ? volume50dAvg : 1);
 
   // 1. 直近20営業日のスイング高値 (直近2〜20日前の高値)
   const window20 = quotes.slice(2, Math.min(quotes.length, 21));
@@ -144,8 +146,8 @@ export function calculateSepaPullback(
         const boClose = boDay.adj_close;
         const boVol = boDay.adj_volume;
 
-        // 当時の50日平均出来高
-        const priorVol50 = quotes.slice(t_bo, t_bo + 50).reduce((sum, q) => sum + q.adj_volume, 0) / Math.min(50, quotes.length - t_bo);
+        // 当時のトリム50日平均出来高（配列長ガード付き）
+        const priorVol50 = calculateTrimmedVolume50d(quotes, t_bo);
         if (boVol < priorVol50 * 1.3) continue;
 
         // 【上ヒゲ排除: Close Location Value >= 0.70 (上位30%以内の高値引け大陽線)】

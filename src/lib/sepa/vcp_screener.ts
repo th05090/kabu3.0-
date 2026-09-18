@@ -1,4 +1,4 @@
-import { RawDailyQuote } from './trend_calculator';
+import { RawDailyQuote, calculateTrimmedVolume50d } from './trend_calculator';
 import { SepaVcpMetrics } from '../../features/sepa/types/sepa';
 
 /**
@@ -47,9 +47,8 @@ export function calculateSepaVcp(quotes: RawDailyQuote[]): SepaVcpMetrics {
   if (!quotes || quotes.length < 15) return defaultRes;
 
   const currentClose = quotes[0].adj_close;
-  const currentVolume = quotes[0].adj_volume;
 
-  // 1. ベース高値 (Base High: 直近2〜65営業日前の終値最高値)
+  // 1. 通常時（ブレイクなし）のベース高値とピボットを仮算出
   const baseWindowEnd = Math.min(quotes.length, 66);
   if (baseWindowEnd > 2) {
     const baseQuotes = quotes.slice(2, baseWindowEnd);
@@ -58,7 +57,7 @@ export function calculateSepaVcp(quotes: RawDailyQuote[]): SepaVcpMetrics {
       defaultRes.base_high = baseHigh;
       defaultRes.base_depth_pct = ((currentClose - baseHigh) / baseHigh) * 100;
 
-      // 2. 真のピボット価格 (Pivot Price: 直近2〜15営業日前＝約3週間の収縮・ハンドル局所高値)
+      // 真のピボット価格 (直近2〜15営業日前＝約3週間の局所高値)
       const pivotWindowEnd = Math.min(quotes.length, 16);
       const pivotQuotes = quotes.slice(2, pivotWindowEnd);
       const pivotPrice = Math.max(...pivotQuotes.map(q => q.adj_close));
@@ -78,7 +77,59 @@ export function calculateSepaVcp(quotes: RawDailyQuote[]): SepaVcpMetrics {
     }
   }
 
-  // 2. ATR (値幅収縮) の算出
+  // 2. 直近0〜5営業日前（約1週間）のブレイクアウト遡り探索とピボット価格のロック
+  // t=0(当日) 〜 t=5(5営業日前) を走査
+  // ※ブレイク日 t に対する局所高値は、tからさらに2〜15日前 (t+2 〜 t+16) を遡って算出
+  for (let t = 0; t <= Math.min(5, quotes.length - 17); t++) {
+    const boDay = quotes[t];
+    const tPivotQuotes = quotes.slice(t + 2, Math.min(quotes.length, t + 16));
+    const tBaseQuotes = quotes.slice(t + 2, Math.min(quotes.length, t + 66));
+    if (tPivotQuotes.length === 0 || tBaseQuotes.length === 0) continue;
+
+    const priorPivot = Math.max(...tPivotQuotes.map(q => q.adj_close));
+    const priorBaseHigh = Math.max(...tBaseQuotes.map(q => q.adj_close));
+    if (priorPivot <= 0 || priorBaseHigh <= 0) continue;
+
+    // ハンドル健全性（当時のピボットがベース高値の15%以内にあるか）
+    const isPriorHandleHealthy = priorPivot >= priorBaseHigh * 0.85;
+    if (!isPriorHandleHealthy) continue;
+
+    // 当時のトリム50日平均出来高（配列長ガード付き）
+    const boTrimmedVol50 = calculateTrimmedVolume50d(quotes, t);
+
+    // ブレイク条件:
+    // 1. 終値が当時のピボットを上抜け (boDay.adj_close > priorPivot)
+    // 2. 出来高が当時のトリム50日出来高の基準以上 (当日t=0なら1.5倍、過去数日は1.3倍以上)
+    // 3. 上位30%以内の高値引け陽線 (CLV >= 0.70)
+    const range = boDay.adj_high - boDay.adj_low;
+    const clv = range > 0 ? (boDay.adj_close - boDay.adj_low) / range : 1.0;
+    const volMultiple = t === 0 ? 1.5 : 1.3;
+
+    if (
+      boDay.adj_close > priorPivot &&
+      boDay.adj_volume >= boTrimmedVol50 * volMultiple &&
+      clv >= 0.70
+    ) {
+      // 直近ブレイクアウトを検知！ピボット価格を当時の抵抗線価格にロック
+      defaultRes.pivot_price = priorPivot;
+      defaultRes.base_high = priorBaseHigh;
+      defaultRes.base_depth_pct = ((currentClose - priorBaseHigh) / priorBaseHigh) * 100;
+      defaultRes.is_handle_healthy = true;
+
+      const distFromLocked = ((currentClose - priorPivot) / priorPivot) * 100;
+      defaultRes.pivot_distance_pct = distFromLocked;
+
+      // オニール・ミネルヴィニ流買いゾーン判定: ピボットから 0.0% 〜 +5.0%
+      if (distFromLocked >= 0 && distFromLocked <= 5.0) {
+        defaultRes.is_pivot_breakout = true;
+      }
+      // ブレイク検知時はセットアップ直前（is_near_pivot）は解除
+      defaultRes.is_near_pivot = false;
+      break; // 直近の成立ブレイクを採用
+    }
+  }
+
+  // 3. ATR (値幅収縮) の算出
   const atr10 = calculateAtr(quotes, 10);
   const atr50 = calculateAtr(quotes, 50);
 
@@ -92,34 +143,23 @@ export function calculateSepaVcp(quotes: RawDailyQuote[]): SepaVcpMetrics {
     defaultRes.is_volatility_contracted = contractionRatio < 0.70;
   }
 
-  // 3. 出来高枯渇 (Volume Dry-Up: VDU) の算出
-  if (quotes.length >= 50) {
-    const vol5Sum = quotes.slice(0, 5).reduce((acc, q) => acc + q.adj_volume, 0);
-    const vol50Sum = quotes.slice(0, 50).reduce((acc, q) => acc + q.adj_volume, 0);
+  // 4. 出来高枯渇 (Volume Dry-Up: VDU) の算出（トリム50日平均基準・配列長ガード付き）
+  const vol5Sum = quotes.slice(0, Math.min(5, quotes.length)).reduce((acc, q) => acc + q.adj_volume, 0);
+  const vol5Avg = vol5Sum / Math.min(5, quotes.length);
+  const trimmedVol50 = calculateTrimmedVolume50d(quotes, 0);
 
-    const vol5Avg = vol5Sum / 5;
-    const vol50Avg = vol50Sum / 50;
+  // 参考値としての50日単純平均も計算・保持
+  const vol50Slice = quotes.slice(0, Math.min(50, quotes.length));
+  const vol50Avg = vol50Slice.reduce((acc, q) => acc + q.adj_volume, 0) / (vol50Slice.length || 1);
 
-    defaultRes.volume_5d_avg = vol5Avg;
-    defaultRes.volume_50d_avg = vol50Avg;
+  defaultRes.volume_5d_avg = vol5Avg;
+  defaultRes.volume_50d_avg = vol50Avg;
 
-    if (vol50Avg > 0) {
-      const dryupRatio = vol5Avg / vol50Avg;
-      defaultRes.volume_dryup_ratio = dryupRatio;
-      // 5日平均出来高が50日平均の60%以下に枯渇
-      defaultRes.is_volume_dryup = dryupRatio < 0.60;
-
-      // ピボットブレイクアウト判定: 健全ハンドル かつ ピボット直上 (0〜+3%) かつ 当日出来高が50日平均の1.5倍以上
-      if (
-        defaultRes.is_handle_healthy &&
-        defaultRes.pivot_distance_pct != null &&
-        defaultRes.pivot_distance_pct >= 0 &&
-        defaultRes.pivot_distance_pct <= 3.0 &&
-        currentVolume >= vol50Avg * 1.5
-      ) {
-        defaultRes.is_pivot_breakout = true;
-      }
-    }
+  if (trimmedVol50 > 0) {
+    const dryupRatio = vol5Avg / trimmedVol50;
+    defaultRes.volume_dryup_ratio = dryupRatio;
+    // トリム50日平均出来高の60%以下に枯渇
+    defaultRes.is_volume_dryup = dryupRatio < 0.60;
   }
 
   return defaultRes;

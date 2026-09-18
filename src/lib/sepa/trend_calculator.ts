@@ -68,6 +68,35 @@ export function calculateEma(quotes: RawDailyQuote[], period: number): number | 
 }
 
 /**
+ * トリム50日平均出来高（上位3日＝約6%の外れ値を除外した平時実力出来高）
+ * ガード:
+ * - availableQuotes.length >= 50: 過去50本のうち上位3本を除外した残り47本の平均
+ * - 20 <= availableQuotes.length < 50: 過去 availableQuotes.length 本のうち上位1本を除外した平均
+ * - availableQuotes.length < 20: 全件平均（フォールバック）
+ * - 出来高ゼロ対策: 戻り値が 0 の場合は 1 を返す
+ */
+export function calculateTrimmedVolume50d(quotes: RawDailyQuote[], offset: number = 0): number {
+  const availableQuotes = quotes.slice(offset);
+  const n = availableQuotes.length;
+  if (n === 0) return 1;
+
+  if (n >= 50) {
+    const vols = availableQuotes.slice(0, 50).map(q => q.adj_volume).sort((a, b) => a - b);
+    const trimmed = vols.slice(0, 47); // 上位3本除外
+    const sum = trimmed.reduce((acc, v) => acc + v, 0);
+    return Math.max(1, sum / trimmed.length);
+  } else if (n >= 20) {
+    const vols = availableQuotes.slice(0, n).map(q => q.adj_volume).sort((a, b) => a - b);
+    const trimmed = vols.slice(0, n - 1); // 上位1本除外
+    const sum = trimmed.reduce((acc, v) => acc + v, 0);
+    return Math.max(1, sum / trimmed.length);
+  } else {
+    const sum = availableQuotes.reduce((acc, q) => acc + q.adj_volume, 0);
+    return Math.max(1, sum / n);
+  }
+}
+
+/**
  * ミネルヴィニ・トレンドテンプレート8条件およびIPOバイパスを計算
  */
 export function calculateSepaTrend(quotes: RawDailyQuote[]): SepaTrendMetrics {
