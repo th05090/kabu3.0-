@@ -4,8 +4,7 @@ import React, { useState } from 'react';
 import { TrendTemplateTab } from './TrendTemplateTab';
 import { VcpCandidatesTab } from './VcpCandidatesTab';
 import { DiagnosticsTab } from './DiagnosticsTab';
-import { TrendingUp, Target, Activity, HelpCircle } from 'lucide-react';
-import Link from 'next/link';
+import { TrendingUp, Target, Activity } from 'lucide-react';
 
 export function SepaDashboard() {
   const [activeTab, setActiveTab] = useState<'trend' | 'vcp' | 'diagnostics'>('trend');
@@ -28,13 +27,6 @@ export function SepaDashboard() {
           <p>
             Stage 2 上昇トレンド・日本株独自動的RSレーティング・四半期単体成長・客観VCPスクリーニング
           </p>
-        </div>
-
-        <div>
-          <Link href="/docs/sepa" className="sepa-guide-link">
-            <HelpCircle size={15} />
-            SEPA解説ガイド
-          </Link>
         </div>
       </div>
 

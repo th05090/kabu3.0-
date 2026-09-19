@@ -12,11 +12,13 @@
   "dependencies": {
     "@libsql/client": "^0.17.4",
     "@qdrant/js-client-rest": "^1.18.0",
+    "@types/katex": "^0.16.8",
     "cheerio": "^1.2.0",
     "clsx": "^2.1.1",
     "csv-parse": "^7.0.1",
     "date-fns": "^4.4.0",
     "dotenv": "^17.4.2",
+    "katex": "^0.18.7",
     "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.26.0",
     "next": "16.2.11",

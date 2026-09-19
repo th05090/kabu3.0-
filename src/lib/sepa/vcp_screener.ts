@@ -50,16 +50,16 @@ export function calculateSepaVcp(quotes: RawDailyQuote[]): SepaVcpMetrics {
 
   // 1. 通常時（ブレイクなし）のベース高値とピボットを仮算出
   const baseWindowEnd = Math.min(quotes.length, 66);
-  if (baseWindowEnd > 2) {
-    const baseQuotes = quotes.slice(2, baseWindowEnd);
+  if (baseWindowEnd > 1) {
+    const baseQuotes = quotes.slice(1, baseWindowEnd);
     const baseHigh = Math.max(...baseQuotes.map(q => q.adj_close));
     if (baseHigh > 0) {
       defaultRes.base_high = baseHigh;
       defaultRes.base_depth_pct = ((currentClose - baseHigh) / baseHigh) * 100;
 
-      // 真のピボット価格 (直近2〜15営業日前＝約3週間の局所高値)
-      const pivotWindowEnd = Math.min(quotes.length, 16);
-      const pivotQuotes = quotes.slice(2, pivotWindowEnd);
+      // 真のピボット価格 (直近1〜20営業日前＝約1ヶ月間の局所高値)
+      const pivotWindowEnd = Math.min(quotes.length, 21);
+      const pivotQuotes = quotes.slice(1, pivotWindowEnd);
       const pivotPrice = Math.max(...pivotQuotes.map(q => q.adj_close));
 
       if (pivotPrice > 0) {
@@ -79,11 +79,11 @@ export function calculateSepaVcp(quotes: RawDailyQuote[]): SepaVcpMetrics {
 
   // 2. 直近0〜5営業日前（約1週間）のブレイクアウト遡り探索とピボット価格のロック
   // t=0(当日) 〜 t=5(5営業日前) を走査
-  // ※ブレイク日 t に対する局所高値は、tからさらに2〜15日前 (t+2 〜 t+16) を遡って算出
-  for (let t = 0; t <= Math.min(5, quotes.length - 17); t++) {
+  // ※ブレイク日 t に対する局所高値ピボットは、直前日 (t+1) から過去約1ヶ月 (t+25) を遡って算出
+  for (let t = 0; t <= Math.min(5, quotes.length - 26); t++) {
     const boDay = quotes[t];
-    const tPivotQuotes = quotes.slice(t + 2, Math.min(quotes.length, t + 16));
-    const tBaseQuotes = quotes.slice(t + 2, Math.min(quotes.length, t + 66));
+    const tPivotQuotes = quotes.slice(t + 1, Math.min(quotes.length, t + 25));
+    const tBaseQuotes = quotes.slice(t + 1, Math.min(quotes.length, t + 66));
     if (tPivotQuotes.length === 0 || tBaseQuotes.length === 0) continue;
 
     const priorPivot = Math.max(...tPivotQuotes.map(q => q.adj_close));
