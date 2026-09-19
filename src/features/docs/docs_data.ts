@@ -19,6 +19,15 @@ export const DOCS_REGISTRY: DocItem[] = [
     description: 'セクター資金流入からSEPA押し目、反発確認、資金管理・損切りまでの体系的思考フレームワーク。',
   },
   {
+    id: 'market-regime',
+    filename: 'market_regime_user_guide.md',
+    title: '市場地合い判定（Market Regime）ガイド',
+    category: 'trading',
+    categoryLabel: '環境認識',
+    badge: '地合い常駐',
+    description: 'ヘッダー常駐の相場環境インジケーター。指数・ブレッドス・Stage 2比率・ディストリビューション日の客観判定。',
+  },
+  {
     id: 'sector-inflow',
     filename: 'sector_inflow_user_guide.md',
     title: 'GICSセクター資金流入確認ツール ガイド',

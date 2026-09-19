@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { LayoutDashboard, BarChart2, Lightbulb, Bell, Briefcase } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
-import { SyncButton } from '@/components/SyncButton';
+import { AppHeader } from '@/components/AppHeader';
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -23,6 +22,7 @@ export default function RootLayout({
         <div className="app-layout">
           <Sidebar />
           <div className="app-main">
+            <AppHeader />
             {children}
           </div>
         </div>
