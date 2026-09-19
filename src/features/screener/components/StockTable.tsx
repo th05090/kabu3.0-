@@ -4,6 +4,7 @@ import React from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { GICS_DICTIONARY } from '@/data/gics_dictionary';
+import { WatchlistButton } from '@/features/watchlist/components/WatchlistButton';
 
 // DBから返される行の型（実際には不要なものも多いが網羅）
 export type StockRow = {
@@ -119,6 +120,7 @@ export function StockTable({ data }: { data: StockRow[] }) {
       <table className="stock-table">
         <thead>
           <tr>
+            <th style={{ width: '36px', textAlign: 'center' }}>★</th>
             <th className="sticky-col">銘柄コード</th>
             <th className="sticky-col">銘柄名</th>
             <th>市場</th>
@@ -174,6 +176,9 @@ export function StockTable({ data }: { data: StockRow[] }) {
 
             return (
             <tr key={stock.ticker}>
+              <td style={{ textAlign: 'center' }}>
+                <WatchlistButton ticker={stock.ticker} source="screener" />
+              </td>
               <td className="sticky-col">
                 <Link 
                   href={`/stocks/${stock.ticker}`}

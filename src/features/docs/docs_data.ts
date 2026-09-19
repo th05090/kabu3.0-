@@ -46,6 +46,15 @@ export const DOCS_REGISTRY: DocItem[] = [
     description: 'ミネルヴィニ流トレンドテンプレート、Stage 2+Tier 1財務条件、21EMA/50MA押し目、ピボットロック機構。',
   },
   {
+    id: 'watchlist',
+    filename: 'watchlist_user_guide.md',
+    title: '統合ウォッチリスト 利用者ガイド',
+    category: 'trading',
+    categoryLabel: '銘柄管理',
+    badge: '2ペイン監視',
+    description: 'ワンクリック星マーク登録、登録元ソース別自動タグ付け、登録来騰落率追跡、日足チャート＆メモ連動。',
+  },
+  {
     id: 'themes',
     filename: 'theme_extraction_user_guide.md',
     title: 'テーマ分析・動的検索 ガイド',

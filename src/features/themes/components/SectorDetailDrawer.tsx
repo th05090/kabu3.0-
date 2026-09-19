@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { X, ExternalLink, ArrowUpDown } from 'lucide-react';
 import Link from 'next/link';
 import { SectorInflowSummary } from '../sector_inflow_types';
+import { WatchlistButton } from '@/features/watchlist/components/WatchlistButton';
 
 interface SectorDetailDrawerProps {
   sector: SectorInflowSummary | null;
@@ -200,19 +201,22 @@ export const SectorDetailDrawer: React.FC<SectorDetailDrawerProps> = ({ sector, 
                       )}
                     </td>
                     <td>
-                      <Link
-                        href={`/stocks/${stock.code}`}
-                        target="_blank"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#60a5fa' }}
-                      >
-                        <span className="font-mono font-bold" style={{ color: '#fff' }}>
-                          {stock.code}
-                        </span>
-                        <span className="truncate" style={{ maxWidth: '140px', color: '#cbd5e1' }}>
-                          {stock.name}
-                        </span>
-                        <ExternalLink size={12} style={{ opacity: 0.6 }} />
-                      </Link>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <WatchlistButton ticker={stock.code} source="sector" size={14} />
+                        <Link
+                          href={`/stocks/${stock.code}`}
+                          target="_blank"
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#60a5fa' }}
+                        >
+                          <span className="font-mono font-bold" style={{ color: '#fff' }}>
+                            {stock.code}
+                          </span>
+                          <span className="truncate" style={{ maxWidth: '140px', color: '#cbd5e1' }}>
+                            {stock.name}
+                          </span>
+                          <ExternalLink size={12} style={{ opacity: 0.6 }} />
+                        </Link>
+                      </div>
                     </td>
                     <td className={`text-right font-mono font-bold ${stock.returnRate >= 0 ? 'text-green' : 'text-red'}`}>
                       {stock.returnRate >= 0 ? '+' : ''}{stock.returnRate}%

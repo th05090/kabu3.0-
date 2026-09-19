@@ -167,7 +167,23 @@ async function main() {
     );
   `);
 
+  // watchlist_items (統合ウォッチリスト銘柄)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS watchlist_items (
+      id TEXT PRIMARY KEY,
+      ticker TEXT NOT NULL UNIQUE,
+      source TEXT NOT NULL,
+      added_price REAL NOT NULL,
+      added_date TEXT NOT NULL,
+      notes TEXT,
+      target_price REAL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
   // Index creation for fast lookups and fast UPDATEs during stock splits
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_watchlist_items_ticker ON watchlist_items(ticker);`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_daily_quotes_ticker ON daily_quotes(ticker);`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_daily_quotes_date ON daily_quotes(date);`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_financials_ticker ON financials(ticker);`);

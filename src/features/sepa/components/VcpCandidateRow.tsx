@@ -4,6 +4,7 @@ import React from 'react';
 import { SepaStockRecord } from '../types/sepa';
 import { Tier2ScoreBadges } from './Tier2ScoreBadges';
 import { GICS_DICTIONARY } from '@/data/gics_dictionary';
+import { WatchlistButton } from '@/features/watchlist/components/WatchlistButton';
 
 interface VcpCandidateRowProps {
   stock: SepaStockRecord;
@@ -29,6 +30,7 @@ export function VcpCandidateRow({ stock: s, isSelected, mode, onSelect }: VcpCan
       <td style={{ minWidth: '170px' }}>
         <div style={{ fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            <WatchlistButton ticker={s.ticker} source="sepa" size={14} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
             {isTier1 && (
               <span className="sepa-badge-tier1" style={{ fontSize: '0.6rem', padding: '0.08rem 0.3rem', flexShrink: 0 }}>

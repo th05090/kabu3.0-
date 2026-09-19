@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Lightbulb, TrendingUp, BookOpen } from 'lucide-react';
+import { LayoutDashboard, Lightbulb, TrendingUp, Bookmark, BookOpen } from 'lucide-react';
 import { SyncButton } from './SyncButton';
 
 export function Sidebar() {
@@ -24,6 +24,10 @@ export function Sidebar() {
         <Link href="/sepa" className={`nav-item ${pathname.startsWith('/sepa') ? 'active' : ''}`}>
           <TrendingUp size={20} />
           <span>SEPA</span>
+        </Link>
+        <Link href="/watchlist" className={`nav-item ${pathname.startsWith('/watchlist') ? 'active' : ''}`}>
+          <Bookmark size={20} />
+          <span>ウォッチリスト</span>
         </Link>
         <Link href="/docs" className={`nav-item ${pathname.startsWith('/docs') ? 'active' : ''}`}>
           <BookOpen size={20} />

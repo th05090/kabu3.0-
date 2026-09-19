@@ -7,6 +7,7 @@ import { GicsClassificationCard } from './GicsClassificationCard';
 import { EarningsPdfsCard } from './EarningsPdfsCard';
 import { EarningsPdfItem } from '../lib/earnings_pdfs';
 import { GICS_DICTIONARY } from '@/data/gics_dictionary';
+import { WatchlistButton } from '@/features/watchlist/components/WatchlistButton';
 
 interface Props {
   stock: any;
@@ -83,7 +84,10 @@ export function StockAnalysisDashboard({ stock, quotes, financials, aiReport, eq
           <div className="stock-basic-info">
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
-                <h1 style={{ flex: 1 }}>{stock.name}</h1>
+                <h1 style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {stock.name}
+                  <WatchlistButton ticker={stock.ticker} source="screener" size={20} />
+                </h1>
                 <span className="ticker" style={{ flexShrink: 0 }}>{stock.ticker.slice(0,4)}</span>
               </div>
               <div className="stock-basic-tags">
