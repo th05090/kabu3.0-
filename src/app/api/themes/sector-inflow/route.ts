@@ -6,7 +6,16 @@ import {
   RawStockDailyQuote,
   RawStockMetricData,
 } from '@/features/themes/sector_inflow_calculator';
-import { CategoryLevel, InflowPeriod, SectorInflowApiResponse } from '@/features/themes/sector_inflow_types';
+import {
+  calculateSectorEarlyRadar,
+  SectorEarlyRadarInput,
+} from '@/features/themes/sector_early_radar_calculator';
+import {
+  CategoryLevel,
+  InflowPeriod,
+  SectorInflowApiResponse,
+  getSectorStageBadge,
+} from '@/features/themes/sector_inflow_types';
 
 // インメモリ簡易キャッシュ (60秒TTL)
 let cachedData: {
@@ -51,8 +60,7 @@ export async function GET(request: NextRequest) {
         sm.volume_50d_avg,
         sm.is_pullback_21_ema,
         sm.is_pullback_50,
-        sm.has_breakout_prior,
-        sm.days_since_breakout
+        sm.is_pivot_breakout
       FROM equities_master m
       JOIN stocks s ON m.ticker = s.ticker
       LEFT JOIN sepa_metrics sm ON s.ticker = sm.ticker
@@ -126,8 +134,7 @@ export async function GET(request: NextRequest) {
       const isPullback = isPullback21 || isPullback50;
       const isBounceTriggered = isPullback && latest.close > latest.open && latest.close > prev.high;
 
-      const daysSince = row.days_since_breakout != null ? Number(row.days_since_breakout) : 999;
-      const isBreakoutRecent = Number(row.has_breakout_prior) === 1 && daysSince <= 5;
+      const isBreakoutRecent = Number(row.is_pivot_breakout) === 1;
 
       let pullbackType: 'NONE' | 'PULLBACK_21EMA' | 'PULLBACK_50MA' = 'NONE';
       if (isPullback21) pullbackType = 'PULLBACK_21EMA';
@@ -155,18 +162,72 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 5. 計算エンジン実行
+    // 5. 計算エンジン実行 (トレンド確認)
     const sectors = calculateSectorInflow({
       period,
       stocksData,
       categoryLevel,
     });
 
+    // 6. 市場売買代金コンテキスト算出
+    let totalMarketTurnoverToday = 0;
+    let totalMarketTurnoverPast20 = 0;
+    for (const s of stocksData) {
+      const qLen = s.quotes.length;
+      if (qLen >= 1) {
+        totalMarketTurnoverToday += s.quotes[qLen - 1].turnover;
+        const p20Start = Math.max(0, qLen - 21);
+        for (let k = p20Start; k < qLen - 1; k++) {
+          totalMarketTurnoverPast20 += s.quotes[k].turnover;
+        }
+      }
+    }
+    const avgMarketTurnoverPast20 = totalMarketTurnoverPast20 / 20;
+
+    // 7. 先行初動レーダー計算 (母集団は sectors と 100% 完全同一)
+    const earlyInputs: SectorEarlyRadarInput[] = sectors.map(sec => {
+      const matchedStocks = stocksData.filter(stk => {
+        if (categoryLevel === 'industry_group') {
+          return stk.gicsIndustryGroupId === sec.industryId;
+        }
+        return stk.gicsIndustryId === sec.industryId;
+      });
+      return {
+        industryId: sec.industryId,
+        industryName: sec.industryName,
+        stocks: matchedStocks,
+      };
+    });
+
+    const earlyRadarMap = calculateSectorEarlyRadar(earlyInputs, {
+      totalMarketTurnoverToday,
+      avgMarketTurnoverPast20,
+    });
+
+    // 8. トレンド Q1 / 初動 Q1 の判定および 3段階進行ステータス付与
+    const q1Threshold = Math.floor(sectors.length / 5);
+    sectors.forEach((sec, idx) => {
+      const isTrendQ1 = idx < q1Threshold;
+      const earlyMetrics = earlyRadarMap.get(sec.industryId) || {
+        stealthIndex: 0,
+        ignitionRatio: 0,
+        decouplingRatio: 0,
+        leaderActionRatio: 0,
+        earlyScore: 0,
+        earlyRank: 0,
+        isQ1: false,
+      };
+      sec.trendScore = sec.finalScore;
+      sec.trendRank = idx + 1;
+      sec.earlyRadar = earlyMetrics;
+      sec.stageStatus = getSectorStageBadge(earlyMetrics.isQ1, isTrendQ1);
+    });
+
     const response: SectorInflowApiResponse = {
       asOfDate: maxDate,
       period,
       categoryLevel,
-      totalMarketTurnover: 0,
+      totalMarketTurnover: totalMarketTurnoverToday,
       totalSectorsCount: sectors.length,
       sectors,
     };

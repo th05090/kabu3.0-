@@ -22,12 +22,12 @@ export interface SectorStatusBadgeInfo {
   description: string;
 }
 
-export type StockPullbackType = 'NONE' | 'PULLBACK_21EMA' | 'PULLBACK_50MA' | 'BREAKOUT';
+export type StockPullbackType = 'NONE' | 'PULLBACK_21EMA' | 'PULLBACK_50MA';
 
 export interface StockPullbackBadgeInfo {
   priority: number;
   label: string;
-  badgeType: 'trigger' | 'breakout' | 'pullback_21' | 'pullback_50' | 'none';
+  badgeType: 'trigger' | 'pullback_21' | 'pullback_50' | 'none';
   description: string;
 }
 
@@ -49,6 +49,30 @@ export interface SectorStockDetail {
   };
 }
 
+export type SectorViewMode = 'early' | 'trend';
+
+export interface EarlyRadarMetrics {
+  stealthIndex: number;       // ① ステルス集積指数
+  ignitionRatio: number;      // ② 出来高点火率 (%)
+  decouplingRatio: number;    // ③ 市場逆行耐性比率 (%)
+  leaderActionRatio: number;  // ④ 先導株先行アクション比率 (%)
+  earlyScore: number;         // 先行初動パーセンタイルスコア (0〜100)
+  earlyRank: number;          // 先行初動順位
+  isQ1: boolean;              // 先行初動 上位20%フラグ
+}
+
+export type SectorStageStatus =
+  | 'both_confluent'  // ⚡📊 初動＋トレンド一致
+  | 'early_only'      // ⚡ 初動兆候のみ
+  | 'trend_only'      // 📊 トレンド確認のみ
+  | 'neutral';        // 中立
+
+export interface SectorStageBadgeInfo {
+  label: string;
+  variant: SectorStageStatus;
+  description: string;
+}
+
 export interface SectorInflowSummary {
   industryId: string;
   industryName: string;
@@ -58,6 +82,12 @@ export interface SectorInflowSummary {
   finalScore: number;         // 最終パーセンタイルスコア (0〜100)
   rawScore: number;           // 合成生スコア (0.0〜1.0)
   status: SectorStatusBadgeInfo;
+
+  // 3段階進行ステータスおよび先行初動レーダー
+  trendScore: number;         // トレンド確認スコア (0〜100)
+  trendRank: number;          // トレンド確認順位
+  earlyRadar: EarlyRadarMetrics; // 先行初動4大指標
+  stageStatus: SectorStageBadgeInfo; // 相場進行段階バッジ
 
   // Layer 1: 資金フロー指標 (ウェイト: 40%)
   turnoverShareNow: number;     // 当期シェア (%)
@@ -166,9 +196,8 @@ export function getSectorStatusBadge(
 export function resolveStockBadge(params: {
   pullbackType: StockPullbackType;
   isBounceTriggered: boolean;
-  isRecentBreakout: boolean;
 }): StockPullbackBadgeInfo {
-  const { pullbackType, isBounceTriggered, isRecentBreakout } = params;
+  const { pullbackType, isBounceTriggered } = params;
 
   // [優先度 1] 反発確認（前日高値上抜け）
   if ((pullbackType === 'PULLBACK_21EMA' || pullbackType === 'PULLBACK_50MA') && isBounceTriggered) {
@@ -180,41 +209,63 @@ export function resolveStockBadge(params: {
     };
   }
 
-  // [優先度 2] ブレイクアウト（直近5日以内）
-  if (isRecentBreakout) {
-    return {
-      priority: 2,
-      label: 'ブレイクアウト（5日以内）',
-      badgeType: 'breakout',
-      description: '直近5営業日以内にベース新高値ブレイクアウト発生',
-    };
-  }
-
-  // [優先度 3] 21EMA支持帯（調整中）
+  // [優先度 2] 21EMA支持帯（調整中）
   if (pullbackType === 'PULLBACK_21EMA') {
     return {
-      priority: 3,
+      priority: 2,
       label: '21EMA支持帯（調整中）',
       badgeType: 'pullback_21',
       description: '21EMA支持帯テスト中（出来高枯渇・反発監視）',
     };
   }
 
-  // [優先度 4] 50日線支持帯（調整中）
+  // [優先度 3] 50日線支持帯（調整中）
   if (pullbackType === 'PULLBACK_50MA') {
     return {
-      priority: 4,
+      priority: 3,
       label: '50日線支持帯（調整中）',
       badgeType: 'pullback_50',
       description: '50MA支持帯テスト中（出来高枯渇・反発監視）',
     };
   }
 
-  // [優先度 5] ― (通常)
+  // [優先度 4] ― (通常)
   return {
-    priority: 5,
+    priority: 4,
     label: '―',
     badgeType: 'none',
     description: '通常状態',
+  };
+}
+
+/**
+ * 相場の進行段階（3段階ステータス）バッジ取得
+ */
+export function getSectorStageBadge(isEarlyQ1: boolean, isTrendQ1: boolean): SectorStageBadgeInfo {
+  if (isEarlyQ1 && isTrendQ1) {
+    return {
+      label: '初動＋トレンド一致',
+      variant: 'both_confluent',
+      description: '先行初動・トレンド確認の双方が上位20%（Q1）に合致した状態',
+    };
+  }
+  if (isEarlyQ1) {
+    return {
+      label: '初動兆候',
+      variant: 'early_only',
+      description: 'トレンド形成前だが、商い急増・逆行耐性などの初動兆候が上位20%（Q1）',
+    };
+  }
+  if (isTrendQ1) {
+    return {
+      label: 'トレンド確認',
+      variant: 'trend_only',
+      description: '価格・需給のトレンド形成が上位20%（Q1）',
+    };
+  }
+  return {
+    label: '通常',
+    variant: 'neutral',
+    description: 'いずれのシグナルも上位20%圏外',
   };
 }

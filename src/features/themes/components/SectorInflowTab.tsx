@@ -2,17 +2,24 @@
 
 import React, { useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { Layers, RefreshCw, AlertCircle } from 'lucide-react';
-import { CategoryLevel, InflowPeriod, SectorInflowApiResponse, SectorInflowSummary } from '../sector_inflow_types';
+import { Layers, RefreshCw, AlertCircle, Zap, BarChart3, CheckCircle2 } from 'lucide-react';
+import {
+  CategoryLevel,
+  InflowPeriod,
+  SectorInflowApiResponse,
+  SectorInflowSummary,
+  SectorViewMode,
+} from '../sector_inflow_types';
 import { SectorInflowTable } from './SectorInflowTable';
 import { SectorDetailDrawer } from './SectorDetailDrawer';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export const SectorInflowTab: React.FC = () => {
+  const [viewMode, setViewMode] = useState<SectorViewMode>('early');
   const [period, setPeriod] = useState<InflowPeriod>(20);
   const [categoryLevel, setCategoryLevel] = useState<CategoryLevel>('industry');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [stageFilter, setStageFilter] = useState<string>('ALL');
   const [minStocks, setMinStocks] = useState<number>(5);
   const [selectedSector, setSelectedSector] = useState<SectorInflowSummary | null>(null);
 
@@ -27,23 +34,27 @@ export const SectorInflowTab: React.FC = () => {
 
   const sectors = data?.sectors || [];
 
-  // フィルタリング処理 (全業種で静的スコア計算後にUIで間引く)
+  // フィルタリング処理
   const filteredSectors = useMemo(() => {
     return sectors.filter((sec) => {
       if (sec.stockCount < minStocks) return false;
-      if (statusFilter !== 'ALL') {
-        if (statusFilter === 'SUPER' && sec.status.variant !== 'super') return false;
-        if (statusFilter === 'EARLY' && sec.status.variant !== 'early') return false;
-        if (statusFilter === 'DEFENSIVE' && sec.status.variant !== 'defensive') return false;
-        if (statusFilter === 'LAGGING' && sec.status.variant !== 'lagging') return false;
-        if (statusFilter === 'OUTFLOW' && sec.status.variant !== 'outflow') return false;
-      }
+      if (stageFilter === 'BOTH' && sec.stageStatus.variant !== 'both_confluent') return false;
+      if (stageFilter === 'EARLY' && sec.stageStatus.variant !== 'early_only' && sec.stageStatus.variant !== 'both_confluent') return false;
+      if (stageFilter === 'TREND' && sec.stageStatus.variant !== 'trend_only' && sec.stageStatus.variant !== 'both_confluent') return false;
       return true;
     });
-  }, [sectors, minStocks, statusFilter]);
+  }, [sectors, minStocks, stageFilter]);
 
-  // トップ3業種
-  const topSectors = useMemo(() => sectors.slice(0, 3), [sectors]);
+  // モードに応じたソート済みトップ3業種
+  const topSectors = useMemo(() => {
+    const sorted = [...sectors];
+    if (viewMode === 'early') {
+      sorted.sort((a, b) => b.earlyRadar.earlyScore - a.earlyRadar.earlyScore);
+    } else {
+      sorted.sort((a, b) => b.trendScore - a.trendScore);
+    }
+    return sorted.slice(0, 3);
+  }, [sectors, viewMode]);
 
   return (
     <div className="sector-inflow-container">
@@ -62,50 +73,72 @@ export const SectorInflowTab: React.FC = () => {
               </span>
             </div>
             <p className="sector-inflow-desc">
-              売買代金シェア変化率、規格化MFV、グループA/D比、ブレッドスなど3層11指標から、市場の資金シフトとセクター内の大口買い集め傾向を客観的に炙り出します。
+              「⚡ 先行初動レーダー（水面下の商い急増・逆行耐性）」と「📊 トレンド確認（資金集中・ブレッドス・新高値）」の2つの視点から、相場の進行段階（初動 ➔ トレンド ➔ 両方一致）を客観的に可視化します。
             </p>
           </div>
 
-          {/* 分類レベル切り替え & 期間切り替え */}
+          {/* 右上操作群: 表示モード切替 & 分類・期間 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-            <div className="sector-inflow-window-tabs">
-              <span style={{ fontSize: '0.75rem', color: '#94a3b8', padding: '0 0.5rem' }}>分類:</span>
+            {/* メイン視点切替トグル */}
+            <div className="sector-inflow-window-tabs" style={{ background: 'rgba(30, 41, 59, 0.8)', padding: '3px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
               <button
-                onClick={() => setCategoryLevel('industry')}
-                className={`sector-inflow-window-btn ${categoryLevel === 'industry' ? 'active' : ''}`}
+                onClick={() => setViewMode('early')}
+                className={`sector-inflow-window-btn ${viewMode === 'early' ? 'active' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: viewMode === 'early' ? 700 : 500 }}
               >
-                業種 (6桁 / ~74)
+                <Zap size={13} style={{ color: '#eab308' }} />
+                <span>先行初動レーダー</span>
               </button>
               <button
-                onClick={() => setCategoryLevel('industry_group')}
-                className={`sector-inflow-window-btn ${categoryLevel === 'industry_group' ? 'active' : ''}`}
+                onClick={() => setViewMode('trend')}
+                className={`sector-inflow-window-btn ${viewMode === 'trend' ? 'active' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: viewMode === 'trend' ? 700 : 500 }}
               >
-                業種グループ (4桁 / ~25)
+                <BarChart3 size={13} style={{ color: '#38bdf8' }} />
+                <span>トレンド確認</span>
               </button>
             </div>
 
-            <div className="sector-inflow-window-tabs">
-              <span style={{ fontSize: '0.75rem', color: '#94a3b8', padding: '0 0.5rem' }}>期間:</span>
-              {[
-                { id: 5 as InflowPeriod, label: '5日 (初動)' },
-                { id: 20 as InflowPeriod, label: '20日 (標準)' },
-                { id: 60 as InflowPeriod, label: '60日 (定着)' },
-              ].map((p) => (
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div className="sector-inflow-window-tabs">
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8', padding: '0 0.5rem' }}>分類:</span>
                 <button
-                  key={p.id}
-                  onClick={() => setPeriod(p.id)}
-                  className={`sector-inflow-window-btn ${period === p.id ? 'active' : ''}`}
+                  onClick={() => setCategoryLevel('industry')}
+                  className={`sector-inflow-window-btn ${categoryLevel === 'industry' ? 'active' : ''}`}
                 >
-                  {p.label}
+                  業種 (6桁)
                 </button>
-              ))}
-              <button
-                onClick={() => mutate()}
-                title="データを再取得"
-                className="sector-inflow-refresh-btn"
-              >
-                <RefreshCw size={14} />
-              </button>
+                <button
+                  onClick={() => setCategoryLevel('industry_group')}
+                  className={`sector-inflow-window-btn ${categoryLevel === 'industry_group' ? 'active' : ''}`}
+                >
+                  グループ (4桁)
+                </button>
+              </div>
+
+              <div className="sector-inflow-window-tabs">
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8', padding: '0 0.5rem' }}>期間:</span>
+                {[
+                  { id: 20 as InflowPeriod, label: '20日' },
+                  { id: 5 as InflowPeriod, label: '5日' },
+                  { id: 60 as InflowPeriod, label: '60日' },
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setPeriod(p.id)}
+                    className={`sector-inflow-window-btn ${period === p.id ? 'active' : ''}`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => mutate()}
+                  title="データを再取得"
+                  className="sector-inflow-refresh-btn"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -120,23 +153,36 @@ export const SectorInflowTab: React.FC = () => {
                 className="sector-inflow-top-card"
               >
                 <div className="sector-top-header">
-                  <span className="sector-top-rank">#{idx + 1} 流入トップ</span>
-                  <span className="sector-top-score">{sec.finalScore}点</span>
+                  <span className="sector-top-rank">
+                    {viewMode === 'early' ? `⚡ #${idx + 1} 初動上位` : `📊 #${idx + 1} トレンド上位`}
+                  </span>
+                  <span className="sector-top-score">
+                    {viewMode === 'early' ? `${sec.earlyRadar.earlyScore}点` : `${sec.trendScore}点`}
+                  </span>
                 </div>
                 <div className="sector-top-name">{sec.industryName}</div>
                 <div className="sector-top-metrics">
-                  <span>
-                    シェア変化:{' '}
-                    <span className={sec.turnoverShareDeltaPct >= 0 ? 'text-green' : 'text-red'}>
-                      {sec.turnoverShareDeltaPct >= 0 ? '+' : ''}{sec.turnoverShareDeltaPct}%
-                    </span>
-                  </span>
-                  <span>
-                    騰落:{' '}
-                    <span className={sec.equalWeightReturn >= 0 ? 'text-green' : 'text-red'}>
-                      {sec.equalWeightReturn >= 0 ? '+' : ''}{sec.equalWeightReturn}%
-                    </span>
-                  </span>
+                  {viewMode === 'early' ? (
+                    <>
+                      <span>ステルス: <strong>{sec.earlyRadar.stealthIndex}</strong></span>
+                      <span>逆行耐性: <strong>{sec.earlyRadar.decouplingRatio}%</strong></span>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        シェア変化:{' '}
+                        <span className={sec.turnoverShareDeltaPct >= 0 ? 'text-green' : 'text-red'}>
+                          {sec.turnoverShareDeltaPct >= 0 ? '+' : ''}{sec.turnoverShareDeltaPct}%
+                        </span>
+                      </span>
+                      <span>
+                        騰落:{' '}
+                        <span className={sec.equalWeightReturn >= 0 ? 'text-green' : 'text-red'}>
+                          {sec.equalWeightReturn >= 0 ? '+' : ''}{sec.equalWeightReturn}%
+                        </span>
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -147,19 +193,17 @@ export const SectorInflowTab: React.FC = () => {
       {/* フィルターバー */}
       <div className="sector-inflow-filter-bar">
         <div className="sector-filter-buttons">
-          <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginRight: '0.25rem' }}>状態絞込:</span>
+          <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginRight: '0.25rem' }}>進行段階絞込:</span>
           {[
             { id: 'ALL', label: 'すべて' },
-            { id: 'SUPER', label: '資金集中（市場超過・上昇）' },
-            { id: 'EARLY', label: '資金流入（初動シグナル）' },
-            { id: 'LAGGING', label: 'セクター上昇（指数劣後）' },
-            { id: 'DEFENSIVE', label: '相対優位（下落耐性 / 防衛的）' },
-            { id: 'OUTFLOW', label: '資金流出傾向（商い縮小）' },
+            { id: 'BOTH', label: '⚡📊 初動＋トレンド一致' },
+            { id: 'EARLY', label: '⚡ 初動兆候 (Q1)' },
+            { id: 'TREND', label: '📊 トレンド確認 (Q1)' },
           ].map((item) => (
             <button
               key={item.id}
-              onClick={() => setStatusFilter(item.id)}
-              className={`sector-filter-btn ${statusFilter === item.id ? 'active' : ''}`}
+              onClick={() => setStageFilter(item.id)}
+              className={`sector-filter-btn ${stageFilter === item.id ? 'active' : ''}`}
             >
               {item.label}
             </button>
@@ -204,6 +248,7 @@ export const SectorInflowTab: React.FC = () => {
           sectors={filteredSectors}
           onSelectSector={(sec) => setSelectedSector(sec)}
           categoryLevel={categoryLevel}
+          viewMode={viewMode}
         />
       )}
 

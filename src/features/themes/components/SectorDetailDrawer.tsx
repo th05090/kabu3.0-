@@ -63,8 +63,11 @@ export const SectorDetailDrawer: React.FC<SectorDetailDrawerProps> = ({ sector, 
               <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#fff' }}>
                 {sector.industryName}
               </h2>
-              <span className="sector-top-score">
-                {sector.status.label} ({sector.finalScore}点)
+              <span className={`sector-status-badge ${sector.stageStatus?.variant === 'both_confluent' ? 'status-super' : sector.stageStatus?.variant === 'early_only' ? 'status-early' : 'status-neutral'}`}>
+                {sector.stageStatus?.label || '通常'}
+              </span>
+              <span className="sector-top-score" style={{ fontSize: '0.85rem' }}>
+                初動: {sector.earlyRadar?.earlyScore ?? 0}点 (第{sector.earlyRadar?.earlyRank ?? '-'}位) / トレンド: {sector.trendScore ?? sector.finalScore}点 (第{sector.trendRank ?? '-'}位)
               </span>
             </div>
           </div>
@@ -77,7 +80,27 @@ export const SectorDetailDrawer: React.FC<SectorDetailDrawerProps> = ({ sector, 
           </button>
         </div>
 
-        {/* サマリー指標バー */}
+        {/* 先行初動 4大指標カード */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', margin: '0.75rem 1.25rem 0 1.25rem' }}>
+          <div className="sector-drawer-stat" style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '0.5rem 0.75rem', borderRadius: '6px' }}>
+            <span className="sector-drawer-stat-label">⚡ ステルス指数</span>
+            <span className="sector-drawer-stat-val" style={{ color: '#fbbf24' }}>{sector.earlyRadar?.stealthIndex ?? '―'}</span>
+          </div>
+          <div className="sector-drawer-stat" style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '0.5rem 0.75rem', borderRadius: '6px' }}>
+            <span className="sector-drawer-stat-label">⚡ 出来高点火率</span>
+            <span className="sector-drawer-stat-val" style={{ color: '#4ade80' }}>{sector.earlyRadar?.ignitionRatio != null ? `${sector.earlyRadar.ignitionRatio}%` : '―'}</span>
+          </div>
+          <div className="sector-drawer-stat" style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '0.5rem 0.75rem', borderRadius: '6px' }}>
+            <span className="sector-drawer-stat-label">⚡ 逆行耐性</span>
+            <span className="sector-drawer-stat-val" style={{ color: '#38bdf8' }}>{sector.earlyRadar?.decouplingRatio != null ? `${sector.earlyRadar.decouplingRatio}%` : '―'}</span>
+          </div>
+          <div className="sector-drawer-stat" style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '0.5rem 0.75rem', borderRadius: '6px' }}>
+            <span className="sector-drawer-stat-label">⚡ 先導株アクション</span>
+            <span className="sector-drawer-stat-val" style={{ color: '#a78bfa' }}>{sector.earlyRadar?.leaderActionRatio != null ? `${sector.earlyRadar.leaderActionRatio}%` : '―'}</span>
+          </div>
+        </div>
+
+        {/* トレンド確認 サマリー指標バー */}
         <div className="sector-drawer-summary-bar">
           <div className="sector-drawer-stat">
             <span className="sector-drawer-stat-label">売買シェア変化</span>
@@ -159,11 +182,6 @@ export const SectorDetailDrawer: React.FC<SectorDetailDrawerProps> = ({ sector, 
                     <td>
                       {badge.badgeType === 'trigger' && (
                         <span className="stock-pullback-badge badge-trigger">
-                          {badge.label}
-                        </span>
-                      )}
-                      {badge.badgeType === 'breakout' && (
-                        <span className="stock-pullback-badge badge-breakout">
                           {badge.label}
                         </span>
                       )}

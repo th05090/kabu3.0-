@@ -222,7 +222,6 @@ export function calculateSectorInflow(params: {
       const stockBadge = resolveStockBadge({
         pullbackType: stock.pullbackType,
         isBounceTriggered: stock.isBounceTriggered,
-        isRecentBreakout: stock.isBreakoutRecent,
       });
 
       stockDetails.push({
@@ -416,9 +415,29 @@ export function calculateSectorInflow(params: {
       finalScore,
       rawScore: Math.round(rawScores[i] * 1000) / 1000,
       status: badge,
+      trendScore: finalScore,
+      trendRank: 0,
+      earlyRadar: {
+        stealthIndex: 0,
+        ignitionRatio: 0,
+        decouplingRatio: 0,
+        leaderActionRatio: 0,
+        earlyScore: 0,
+        earlyRank: 0,
+        isQ1: false,
+      },
+      stageStatus: {
+        label: '通常',
+        variant: 'neutral',
+        description: '初期状態',
+      },
     });
   }
 
-  // 総合スコア降順ソート
-  return result.sort((a, b) => b.finalScore - a.finalScore);
+  // 総合スコア降順ソートおよびtrendRank付与
+  const sorted = result.sort((a, b) => b.finalScore - a.finalScore);
+  sorted.forEach((sec, idx) => {
+    sec.trendRank = idx + 1;
+  });
+  return sorted;
 }
