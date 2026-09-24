@@ -33,15 +33,7 @@ async function main() {
     FROM equities_master 
     WHERE summary IS NOT NULL 
       AND gics_sub_industry_id IS NOT NULL
-      AND name NOT LIKE '%上場信託%'
-      AND name NOT LIKE '%ETF%'
-      AND name NOT LIKE '%ETN%'
-      AND name NOT LIKE '%ＥＴＮ%'
-      AND name NOT LIKE '%投資法人%'
-      AND name NOT LIKE '%リート%'
-      AND name NOT LIKE '%上場投信%'
-      AND name NOT LIKE '%ファンド%'
-      AND name NOT LIKE '%ＥＴＦ%'
+      AND (gics_sub_industry_id NOT LIKE '98%' AND gics_sub_industry_id NOT LIKE '99%')
   `);
   const targets = targetsResult.rows;
   console.log(`Found ${targets.length} companies to classify.`);

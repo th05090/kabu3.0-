@@ -45,15 +45,7 @@ async function main() {
   const res = await db.execute(`
     SELECT ticker 
     FROM equities_master 
-    WHERE name NOT LIKE '%上場信託%'
-      AND name NOT LIKE '%ETF%'
-      AND name NOT LIKE '%ETN%'
-      AND name NOT LIKE '%ＥＴＮ%'
-      AND name NOT LIKE '%投資法人%'
-      AND name NOT LIKE '%リート%'
-      AND name NOT LIKE '%上場投信%'
-      AND name NOT LIKE '%ファンド%'
-      AND name NOT LIKE '%ＥＴＦ%'
+    WHERE (gics_sub_industry_id IS NULL OR (gics_sub_industry_id NOT LIKE '98%' AND gics_sub_industry_id NOT LIKE '99%'))
     ORDER BY ticker ASC
   `);
   const allTickers = res.rows.map(r => r.ticker as string);

@@ -295,5 +295,10 @@
 
   { "sub_industry_id": "60201030", "category_name": "不動産開発", "description": "不動産開発および販売を行う会社。（不動産デベロッパー、マンション分譲、建売分譲、都市再開発事業などを含む）" },
 
-  { "sub_industry_id": "60201040", "category_name": "不動産サービス", "description": "不動産仲介業者、ブローカー、不動産評価業者などの不動産サービス提供会社。（不動産売買・賃貸仲介、不動産情報ポータルサイト運営、不動産鑑定業などを含む）" }
+  { "sub_industry_id": "60201040", "category_name": "不動産サービス", "description": "不動産仲介業者、ブローカー、不動産評価業者などの不動産サービス提供会社。（不動産売買・賃貸仲介、不動産情報ポータルサイト運営、不動産鑑定業などを含む）" },
+
+  { "sub_industry_id": "98101010", "category_name": "TOKYO PRO MARKET", "description": "TOKYO PRO MARKET上場銘柄（特定投資家向けプロ市場銘柄）。" },
+  { "sub_industry_id": "99101010", "category_name": "株式以外", "description": "株式以外の金融商品全般（ETF、ETN、インフラファンド、投資信託、REIT等）。" },
+  { "sub_industry_id": "99101020", "category_name": "ETF・ETN", "description": "上場投資信託（ETF）および上場投資証券（ETN）。株価指数、商品、債券等に連動する運用商品。" },
+  { "sub_industry_id": "99101030", "category_name": "投資信託・REIT", "description": "不動産投資信託（REIT）、インフラファンド、その他の非株式投資信託商品。" }
 ]

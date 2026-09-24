@@ -76,17 +76,8 @@ export async function POST(request: Request) {
       FROM stocks s
       JOIN equities_master m ON s.ticker = m.ticker
       WHERE s.ticker IN (${placeholders})
-      AND m.name NOT LIKE '%上場信託%'
-      AND m.name NOT LIKE '%ETF%'
-      AND m.name NOT LIKE '%ETN%'
-      AND m.name NOT LIKE '%ＥＴＮ%'
-      AND m.name NOT LIKE '%投資法人%'
-      AND m.name NOT LIKE '%リート%'
-      AND m.name NOT LIKE '%上場投信%'
-      AND m.name NOT LIKE '%ファンド%'
-      AND m.name NOT LIKE '%ＥＴＦ%'
-      AND m.name NOT LIKE '%ブル%'
-      AND m.name NOT LIKE '%ベア%'
+      AND (m.gics_sub_industry_id IS NULL OR (m.gics_sub_industry_id NOT LIKE '98%' AND m.gics_sub_industry_id NOT LIKE '99%'))
+      AND (m.theme IS NULL OR m.theme NOT IN ('株式以外', 'TPM'))
     `;
     const dbRes = await db.execute({ sql, args: tickersArr });
 

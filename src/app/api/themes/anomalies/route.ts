@@ -11,16 +11,9 @@ export async function GET() {
       JOIN equities_master m ON s.ticker = m.ticker
       WHERE m.theme IS NOT NULL 
         AND m.gics_audit_status = 'ERROR'
-        AND s.name NOT LIKE '%上場信託%'
-        AND s.name NOT LIKE '%ETF%'
-        AND s.name NOT LIKE '%ETN%'
-        AND s.name NOT LIKE '%ＥＴＮ%'
-        AND s.name NOT LIKE '%投資法人%'
-        AND s.name NOT LIKE '%リート%'
-        AND s.name NOT LIKE '%上場投信%'
-        AND s.name NOT LIKE '%ファンド%'
-        AND s.name NOT LIKE '%ＥＴＦ%'
-        AND s.industry NOT IN ('ETF等', 'REIT等')
+        AND m.gics_sub_industry_id NOT LIKE '98%'
+        AND m.gics_sub_industry_id NOT LIKE '99%'
+        AND (m.theme IS NULL OR m.theme NOT IN ('株式以外', 'TPM'))
       ORDER BY s.ticker ASC
     `);
 

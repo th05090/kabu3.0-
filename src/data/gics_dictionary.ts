@@ -1643,5 +1643,45 @@ export const GICS_DICTIONARY: Record<string, GICSClassification> = {
     "industry_group_name": "不動産管理・開発",
     "sector_id": "60",
     "sector_name": "不動産"
+  },
+
+  "98101010": {
+    "sub_industry_name": "TOKYO PRO MARKET",
+    "industry_id": "981010",
+    "industry_name": "TOKYO PRO MARKET",
+    "industry_group_id": "9810",
+    "industry_group_name": "TOKYO PRO MARKET",
+    "sector_id": "98",
+    "sector_name": "TPM"
+  },
+
+  "99101010": {
+    "sub_industry_name": "株式以外",
+    "industry_id": "991010",
+    "industry_name": "株式以外",
+    "industry_group_id": "9910",
+    "industry_group_name": "株式以外",
+    "sector_id": "99",
+    "sector_name": "株式以外"
+  },
+
+  "99101020": {
+    "sub_industry_name": "ETF・ETN",
+    "industry_id": "991010",
+    "industry_name": "株式以外",
+    "industry_group_id": "9910",
+    "industry_group_name": "株式以外",
+    "sector_id": "99",
+    "sector_name": "株式以外"
+  },
+
+  "99101030": {
+    "sub_industry_name": "投資信託・REIT",
+    "industry_id": "991010",
+    "industry_name": "株式以外",
+    "industry_group_id": "9910",
+    "industry_group_name": "株式以外",
+    "sector_id": "99",
+    "sector_name": "株式以外"
   }
 };

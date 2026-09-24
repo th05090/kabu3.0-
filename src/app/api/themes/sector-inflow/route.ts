@@ -65,10 +65,9 @@ export async function GET(request: NextRequest) {
       JOIN stocks s ON m.ticker = s.ticker
       LEFT JOIN sepa_metrics sm ON s.ticker = sm.ticker
       WHERE m.gics_sub_industry_id IS NOT NULL
-        AND m.name NOT LIKE '%ETF%'
-        AND m.name NOT LIKE '%ETN%'
-        AND m.name NOT LIKE '%リート%'
-        AND m.name NOT LIKE '%投資法人%'
+        AND m.gics_sub_industry_id NOT LIKE '98%'
+        AND m.gics_sub_industry_id NOT LIKE '99%'
+        AND (m.theme IS NULL OR m.theme NOT IN ('株式以外', 'TPM'))
     `;
     const stocksRes = await db.execute(stocksSql);
 

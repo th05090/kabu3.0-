@@ -10,32 +10,28 @@ const db = createClient({
   url: process.env.DATABASE_URL || 'file:local.db',
 });
 
-const NON_OPERATING_PATTERNS = [
-  '上場信託',
-  'ETF',
-  'ETN',
-  'ＥＴＮ',
-  '投資法人',
-  'リート',
-  '上場投信',
-  'ファンド',
-  'ＥＴＦ',
-  'ブル',
-  'ベア',
-];
-
 /**
- * 銘柄が事業会社（個別株）か、投信・ETF・REIT等（非事業会社）かを判定
+ * 銘柄が一般事業会社（個別株）か、非事業会社（ETF・REIT等）/ プロ市場（TPM）かを判定
+ * GICSコード（98: TPM, 99: 株式以外）を除外する単一の決定的ルール（文字一致完全撤廃）
  */
-export function isOperatingCompany(name: string | null | undefined, industry: string | null | undefined): boolean {
-  if (!name) return true;
+export function isOperatingCompany(
+  gicsSubId?: string | null,
+  industry?: string | null,
+  market?: string | null
+): boolean {
+  // 1. GICSコードによる決定論的判定（最優先SSOT）
+  if (gicsSubId) {
+    if (gicsSubId.startsWith('98') || gicsSubId.startsWith('99')) {
+      return false; // 98: TOKYO PRO MARKET, 99: 株式以外(ETF/REIT等)
+    }
+    return true;
+  }
+  // 2. フォールバック（GICS未判定データ用ガード）
   if (industry === 'ETF等' || industry === 'REIT等' || industry === 'その他') {
     return false;
   }
-  for (const pattern of NON_OPERATING_PATTERNS) {
-    if (name.includes(pattern)) {
-      return false;
-    }
+  if (market && (market.includes('PRO') || market === 'TOKYO PRO MARKET')) {
+    return false;
   }
   return true;
 }
@@ -339,7 +335,7 @@ export async function calculateAndPopulateSepa(onProgress?: (msg: string) => voi
       trend.passed_conditions_count = Math.min(8, trend.passed_conditions_count + 1);
     }
 
-    const isOp = isOperatingCompany(s.name, s.industry);
+    const isOp = isOperatingCompany(s.gics_sub_industry_id, s.industry, s.market);
 
     batch.push({
       sql: `INSERT INTO sepa_metrics (

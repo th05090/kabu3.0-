@@ -22,13 +22,7 @@ export async function processEarningsReports(
     SELECT f.ticker, MAX(f.date) as latest_date, e.main_segment, e.sub_segments, e.name, e.summary, e.theme_keywords
     FROM financials f
     JOIN equities_master e ON f.ticker = e.ticker
-    WHERE e.name NOT LIKE '%ETF%'
-      AND e.name NOT LIKE '%ETN%'
-      AND e.name NOT LIKE '%REIT%'
-      AND e.name NOT LIKE '%投資法人%'
-      AND e.name NOT LIKE '%証券投資%'
-      AND e.name NOT LIKE '%ファンド%'
-      AND e.name NOT LIKE '%ＥＴＦ%'
+    WHERE (e.gics_sub_industry_id IS NULL OR (e.gics_sub_industry_id NOT LIKE '98%' AND e.gics_sub_industry_id NOT LIKE '99%'))
   `;
   let args: any[] = [];
   

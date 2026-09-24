@@ -285,7 +285,9 @@ export async function calculateAndPopulateStocks() {
       ) prev_fin ON prev_fin.ticker = fin.ticker AND prev_fin.date = fin.prev_fy_date AND prev_fin.rn = 1
       LEFT JOIN prev_sma_75 ps75 ON m.ticker = ps75.ticker AND ps75.date = (SELECT MAX(date) FROM daily_quotes WHERE ticker = m.ticker)
       LEFT JOIN prev_sma_200 ps200 ON m.ticker = ps200.ticker AND ps200.date = (SELECT MAX(date) FROM daily_quotes WHERE ticker = m.ticker)
-      WHERE met.current_price IS NOT NULL;
+      WHERE met.current_price IS NOT NULL
+        AND (m.gics_sub_industry_id IS NULL OR (m.gics_sub_industry_id NOT LIKE '98%' AND m.gics_sub_industry_id NOT LIKE '99%'))
+        AND (m.theme IS NULL OR m.theme NOT IN ('株式以外', 'TPM'));
     `;
 
     console.log('[Calculator] Executing aggregation query...');

@@ -351,6 +351,11 @@ Dense検索（意味検索）とSparse検索（キーワード一致）を融合
   - 3.2章のフェーズ2から呼び出され、企業の最新の事業要約をもとにハイブリッド検索でTop 10のGICS候補を抽出します。
   - **東証業種マッピング（33業種・17業種フォールバック）とガードレール機構**: 検索を実行する前に、東証が定めた「33業種」および半角表記揺れ、さらには粒度の荒い「17業種（その他など）」に対して、許容されるGICSセクターを事前定義（`TSE_TO_GICS_MAPPING`）してフィルタリングします。AIの検索や推論のみに依存すると、決算資料の表現次第で「通信会社がエネルギー産業に分類される」ような致命的ミス（ハルシネーション）が起こり得ます。そのため、「絶対に覆らない正解データ（東証業種）」をハード制約のガードレールとして敷くことで、大事故を未然に防いでいます。
   - **LLM リランキングと監査**: 抽出された候補に対し、ローカルLLM(Gemma3)を用いて「10個 → 3個（Stage 1）」「3個 → 1個（Stage 2）」と段階的に絞り込みます。その後、決定したカテゴリが企業の実態と合致しているかを外部のGemini API（`gemini-flash-latest`）を用いた「LLM監査（Stage 3）」によって最終検証し、誤分類の検知と理由のテキスト化を行います。Gemini APIのJSON Structured Outputs機能を活用することでパースエラーを完全に防ぎます。
+- **用途1.5: Gemini APIによる全上場企業プロファイル＆GICS一括刷新 (`run_gemini_full_profile_batch.ts`)**
+  - ローカルLLM/ベクトル検索の限界（キーワード誤爆や古い要約の引きずり）を根本解決するため、Gemini APIの事前学習知識を活用して全一般事業会社（3,731社）のプロファイル（事業要約、主力・サブセグメント、機能キーワード、8桁GICSコード）を一括生成・DB同期するバッチアーキテクチャ。
+  - **ゼロコンテキスト推論**: DBの不完全な要約を渡さず、企業名・証券コード・東証業種のみを渡して主力事業の収益源と実態を自律判定。
+  - **決定論的SSOTバリデーション**: `GICS_DICTIONARY` に実在する正規の8桁GICSコードのみをDB（`equities_master`, `stocks`, `sepa_metrics`）に厳格に永続化（無効コードはフォールバック救済）。
+  - **完全レジューム＆安全退避**: `equities_master_backup` / `stocks_backup` テーブルへの退避および、`scratch/gemini_profile_batch_progress.json` による中断・再開制御を完備。
 - **用途2: 動的テーマ検索 (フロントエンド用途)**
   - ユーザーが入力した自然言語（例：「円安メリット」）をLLMが関連キーワード群に拡張し、ハイブリッド検索 (RRF) ＋ Cross-Encoderリランカーを用いて上位50銘柄を瞬時にリストアップします。
 
@@ -434,6 +439,7 @@ kabu3.0/
 │   │   ├── run_sync.ts      # 日次データ同期・遡及調整ジョブ
 │   │   ├── run_theme_batch.ts # 決算書PDFパースとセグメント抽出バッチ
 │   │   ├── run_gics_classification.ts # GICSハイブリッド判定・再分類バッチ
+│   │   ├── run_gemini_full_profile_batch.ts # Gemini APIによる全上場企業GICS・事業要約・セグメント・キーワード一括刷新バッチ
 │   │   ├── analyze_stock_rag.ts # 決算書からのAIアナリストレポート生成バッチ
 │   │   ├── fetch_ir_news.ts     # 新規事業関連IRのスクレイピング・PDF取得スクリプト
 │   │   ├── analyze_ir_news.ts   # 新規事業関連IRのDocling解析とベクトルDB更新スクリプト
@@ -474,10 +480,10 @@ kabu3.0/
 
 - **`equities_master` (銘柄マスタ)**: J-Quantsからの基本情報と、AIが抽出した事業要約・GICS分類を保持します。
   - `ticker` (TEXT PK): 銘柄コード
-  - `name`, `market`, `industry` (TEXT): 企業名、市場、東証業種
+  - `name`, `market`, `industry` (TEXT): 企業名、市場、東証業種（※TOKYO PRO MARKET銘柄はデータとして保持しつつ、GICS独自分類 `98101010` (セクター: TPM) を付与し、ETF/REIT (`99番台`) と同様にGICSコードベースで全投資分析パイプラインから `is_operating_company = 0` として機械的に除外フィルタされます）
   - `last_updated` (TEXT): 最終更新日時
   - `theme`, `summary` (TEXT): 1文要約、AI事業詳細要約
-  - `gics_sub_industry_id` (TEXT): 判定されたGICS分類ID
+  - `gics_sub_industry_id` (TEXT): 判定されたGICS分類ID（標準GICSコード8桁、または独自拡張コード `98101010`: TOKYO PRO MARKET(TPM), `99101010`: 株式以外, `99101020`: ETF・ETN, `99101030`: 投資信託・REIT）
   - `gics_similarity_score` (REAL): GICSベクトルとの類似度
   - `theme_keywords` (TEXT): AIが抽出した機能的価値キーワード群
   - `main_segment`, `sub_segments` (TEXT): 決算書から特定した主力・サブ事業セグメント（JSON文字列）
@@ -967,7 +973,7 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
     1. **Stage 2 上昇トレンド（テクニカル8条件適合）**: `is_trend_template_pass = 1`
     2. **直近四半期 EPS急成長**: 前年同期比 $+20\%$ 以上、または黒字転換（`TURNAROUND`）
     3. **直近四半期 売上高成長**: 前年同期比 $+10\%$ 以上
-    4. **事業会社（株式）限定**: 投信・ETF・REIT等を除外（`is_operating_company = 1`）
+    4. **事業会社（一般株式）限定**: 脆弱な文字一致を完全撤廃し、GICSコード（`98番台`: TPM, `99番台`: 株式以外/ETF/REIT等）に基づく決定論的判定により非事業会社およびプロ市場を完全除外（`is_operating_company = 1`）
   - **Tier 2: 発展（スコアリング・バッジ表示・オプショントグル）**:
     Tier 1 該当銘柄の中で、ミネルヴィニの理想条件の兼備状況を4点満点（0〜4）でスコアリング評価し、UIにバッジ表示・ソート対応。オプショントグルで任意絞り込み可能：
     1. **成長加速（`is_growth_accelerating`）**:
