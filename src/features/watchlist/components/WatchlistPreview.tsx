@@ -73,9 +73,9 @@ export function WatchlistPreview({ item }: WatchlistPreviewProps) {
   const isDailyNeg = item.daily_change_pct < 0;
   const dailyColor = isDailyPos ? '#34d399' : isDailyNeg ? '#fb7185' : '#94a3b8';
 
-  const quotes = sepaData?.quotes || [];
-  const pivotPrice = sepaData?.metrics?.pivot_price || null;
-  const baseHigh = sepaData?.metrics?.base_period_high || null;
+  const quotes = sepaData?.data?.quotes || sepaData?.quotes || [];
+  const pivotPrice = sepaData?.data?.metrics?.pivot_price || sepaData?.metrics?.pivot_price || null;
+  const baseHigh = sepaData?.data?.metrics?.base_period_high || sepaData?.metrics?.base_period_high || null;
 
   return (
     <div className="watchlist-preview-panel">

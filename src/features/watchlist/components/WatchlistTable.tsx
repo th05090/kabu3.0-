@@ -34,13 +34,13 @@ export function WatchlistTable({ items, selectedTicker, onSelectTicker }: Watchl
         <thead>
           <tr>
             <th style={{ width: '36px', textAlign: 'center' }}>★</th>
-            <th>銘柄</th>
-            <th>登録元</th>
-            <th style={{ textAlign: 'right' }}>現在値</th>
-            <th style={{ textAlign: 'right' }}>前日比</th>
-            <th style={{ textAlign: 'right' }}>登録時 (日付)</th>
-            <th style={{ textAlign: 'right' }}>登録来騰落</th>
-            <th>状態</th>
+            <th style={{ minWidth: '160px' }}>銘柄</th>
+            <th style={{ width: '90px', textAlign: 'center' }}>登録元</th>
+            <th style={{ width: '95px', textAlign: 'right' }}>現在値</th>
+            <th style={{ width: '85px', textAlign: 'right' }}>前日比</th>
+            <th style={{ width: '105px', textAlign: 'right' }}>登録時 (日付)</th>
+            <th style={{ width: '90px', textAlign: 'right' }}>登録来騰落</th>
+            <th style={{ width: '95px', textAlign: 'center' }}>状態</th>
           </tr>
         </thead>
         <tbody>
@@ -84,7 +84,7 @@ export function WatchlistTable({ items, selectedTicker, onSelectTicker }: Watchl
                 </td>
 
                 {/* 登録元バッジ */}
-                <td>
+                <td style={{ textAlign: 'center' }}>
                   <span
                     className="watchlist-source-badge"
                     style={{
@@ -123,8 +123,8 @@ export function WatchlistTable({ items, selectedTicker, onSelectTicker }: Watchl
                 </td>
 
                 {/* SEPA状態バッジ */}
-                <td>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', alignItems: 'center' }}>
+                <td style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', alignItems: 'center', justifyContent: 'center' }}>
                     {item.is_pivot_breakout && (
                       <span className="watchlist-badge-breakout">ブレイク</span>
                     )}
