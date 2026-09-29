@@ -185,6 +185,42 @@ export function SepaPriceChart({ quotes, pivotPrice, baseHigh }: SepaPriceChartP
       }))
     );
 
+    // 4. トリム50日平均出来高ライン (平時実力出来高 / VDU・ブレイク判定基準)
+    const calcTrimmedVolume50 = () => {
+      const volData: { time: string; value: number }[] = [];
+      for (let i = 0; i < sorted.length; i++) {
+        const windowStart = Math.max(0, i - 49);
+        const slice = sorted.slice(windowStart, i + 1);
+        const n = slice.length;
+        if (n < 5) continue;
+
+        const vols = slice.map(q => q.volume).sort((a, b) => a - b);
+        let trimmed: number[];
+        if (n >= 50) {
+          trimmed = vols.slice(0, 47); // 上位3本除外
+        } else if (n >= 20) {
+          trimmed = vols.slice(0, n - 1); // 上位1本除外
+        } else {
+          trimmed = vols;
+        }
+        const avg = trimmed.reduce((sum, v) => sum + v, 0) / trimmed.length;
+        volData.push({ time: sorted[i].date, value: Math.round(avg) });
+      }
+      return volData;
+    };
+
+    const vol50Data = calcTrimmedVolume50();
+    if (vol50Data.length > 0) {
+      const vol50Series = chart.addSeries(LineSeries, {
+        color: '#f59e0b',
+        lineWidth: 2,
+        priceScaleId: '',
+        priceFormat: { type: 'volume' },
+        title: '50日出来高(トリム)',
+      });
+      vol50Series.setData(vol50Data);
+    }
+
     // 初期表示範囲を直近1ヶ月（約25営業日）にズーム（スクロール/ピンチで過去データも閲覧可能）
     if (sorted.length > 22) {
       const fromDate = sorted[Math.max(0, sorted.length - 25)].date;
@@ -214,7 +250,7 @@ export function SepaPriceChart({ quotes, pivotPrice, baseHigh }: SepaPriceChartP
     <div style={{ width: '100%', position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.5rem', padding: '0 0.25rem', flexWrap: 'wrap' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-          <span style={{ width: '12px', height: '3px', background: '#a855f7', borderRadius: '2px' }} /> 25 SMA
+          <span style={{ width: '12px', height: '3px', background: '#a855f7', borderRadius: '2px' }} /> 21 EMA
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
           <span style={{ width: '12px', height: '3px', background: '#10b981', borderRadius: '2px' }} /> 50 SMA
@@ -224,6 +260,9 @@ export function SepaPriceChart({ quotes, pivotPrice, baseHigh }: SepaPriceChartP
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
           <span style={{ width: '12px', height: '3px', background: '#f43f5e', borderRadius: '2px' }} /> 200 SMA
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <span style={{ width: '12px', height: '2px', background: '#f59e0b', borderRadius: '1px' }} /> 50日出来高(トリム)
         </span>
         {baseHigh && baseHigh !== pivotPrice && (
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#f97316' }}>
