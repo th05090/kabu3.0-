@@ -400,26 +400,39 @@ kabu3.0/
 ├── src/
 │   ├── app/                 # Next.js App Router (ページおよびBFFエンドポイント)
 │   │   ├── api/             # RESTful API ルート群
+│   │   │   ├── batch/       # バッチ制御API (reclassify, audit-gics)
+│   │   │   ├── data-sync/   # J-Quantsデータ同期SSEトリガー
+│   │   │   ├── docs/        # ナレッジベースMarkdown取得API
+│   │   │   ├── ir-news/     # 新規事業IRニュース一覧取得API
+│   │   │   ├── market-regime/# 市場地合い判定API
+│   │   │   ├── pdf-preview/ # ローカルPDFインライン表示API
 │   │   │   ├── sepa/        # SEPA BFF API (trend, vcp-candidates, diagnostics)
-│   │   │   ├── themes/      # テーマ検索・マイテーマAPI
-│   │   │   ├── stocks/      # 個別銘柄情報・事業要約API
-│   │   │   └── data-sync/   # J-Quantsデータ同期SSEトリガー
+│   │   │   ├── stocks/      # 個別銘柄情報・事業要約・GICS手動修正API
+│   │   │   ├── themes/      # テーマ検索・マイテーマ・セクター資金流入・決算横断検索API
+│   │   │   └── watchlist/   # ウォッチリストCRUD API
+│   │   ├── docs/            # ドキュメント閲覧画面 (page.tsx)
+│   │   ├── page.tsx         # メインスクリーナー画面 (トップページ)
 │   │   ├── sepa/            # SEPA分析ダッシュボード画面 (page.tsx)
 │   │   ├── stocks/[ticker]/ # 銘柄詳細ダッシュボード画面 (page.tsx)
-│   │   └── themes/          # テーマディスカバリー画面 (page.tsx)
+│   │   ├── themes/          # テーマディスカバリー画面 (page.tsx)
+│   │   └── watchlist/       # ウォッチリスト画面 (page.tsx)
 │   │
-│   ├── components/          # アプリケーション全体で共通利用するUI部品 (Sidebar, SyncButton等)
+│   ├── components/          # アプリケーション全体で共通利用するUI部品 (Sidebar, AppHeader, SyncButton等)
 │   │
 │   ├── features/            # ドメイン駆動設計に基づく機能別モジュール群 (Feature Slices)
+│   │   ├── analysis/        # AI決算分析・個別チャート描画
+│   │   ├── docs/            # ナレッジベース閲覧UI・ドキュメント定義
+│   │   ├── earnings/        # 決算PDF解析・Docling・RAG抽出
+│   │   ├── gics/            # GICS分類・LLMクライアント・監査ロジック
+│   │   ├── ir_news/         # 新規事業IR適時開示解析・推論
+│   │   ├── market_regime/   # 市場地合い判定計算ロジック・UIバッジ
+│   │   ├── screener/        # 全銘柄スクリーナー、仮想化テーブル描画
 │   │   ├── sepa/            # SEPA関連UIコンポーネント・フック・型定義
 │   │   │   ├── components/  # SepaDashboard, SepaPriceChart, ChecklistBadges, etc.
 │   │   │   ├── hooks/       # useSepa データフェッチフック
 │   │   │   └── types/       # SEPA専用 TypeScript 型定義 (sepa.ts)
-│   │   ├── earnings/        # 決算PDF解析・Docling・RAG抽出
-│   │   ├── ir_news/         # 新規事業IR適時開示解析・推論
-│   │   ├── analysis/        # AI決算分析・個別チャート描画
-│   │   ├── screener/        # 全銘柄スクリーナー、仮想化テーブル描画
-│   │   └── themes/          # テーマ検索UI、マイテーマ管理、ネットワークグラフ
+│   │   ├── themes/          # テーマ検索UI、マイテーマ管理、セクター資金流入、決算検索
+│   │   └── watchlist/       # ウォッチリストUI、フック、型定義
 │   │
 │   ├── lib/                 # アプリケーション全体で共有されるコアビジネスロジック
 │   │   ├── sepa/            # SEPA計算エンジン
@@ -428,11 +441,12 @@ kabu3.0/
 │   │   │   ├── rs_calculator.ts    # 1〜99パーセンタイル動的加重RS (10日猶予除外)
 │   │   │   ├── quarterly_parser.ts # 3ヶ月単独期パース & 物理減算
 │   │   │   ├── quarterly_standalone.ts # ファンダメンタル急成長率 & Q4会計ノイズガード
-│   │   │   └── vcp_screener.ts     # Base High / True Pivot / ATR収縮 / VDU
+│   │   │   ├── vcp_screener.ts     # Base High / True Pivot / ATR収縮 / VDU
+│   │   │   └── pullback_screener.ts# 21EMA/50SMAプルバック・初回ブレイク判定
 │   │   ├── calculator.ts    # テクニカル指標・ファンダメンタル指標の計算エンジン
 │   │   ├── db.ts            # SQLite (libsql) 接続およびクエリラッパー
-│   │   ├── gics.ts          # GICS分類マスタ連携ヘルパー
 │   │   ├── jquants.ts       # J-Quants API クライアント & 同期後SEPA自動連携
+│   │   ├── segment_extractor.ts # 決算書セグメント情報抽出
 │   │   └── anomaly_detector.ts # データ異常値・テーマ乖離検出
 │   │
 │   ├── scripts/             # 非同期で稼働する独立したNode.js/Pythonバッチ処理群
@@ -495,6 +509,15 @@ kabu3.0/
 - **`shikiho_profiles` (四季報クレンジングデータ)**: LLMが四季報の「特色」からノイズを排除した純粋な機能的価値を格納します。
   - `ticker` (TEXT PK), `original_feature` (TEXT), `index_summary` (TEXT), `index_keywords` (TEXT)
 
+- **`ai_reports` (AI決算分析レポート)**: RAGパイプラインが生成した個別銘柄の決算・適時開示分析レポートを格納します。
+  - `ticker` (TEXT PK): 銘柄コード
+  - `current_performance` (TEXT): 当期業績の事実要約
+  - `future_guidance` (TEXT): 次期見通しの事実要約
+  - `report_comparison` (TEXT): 前回決算との差分比較
+  - `ai_comment` (TEXT): 証券アナリスト視点の総合評価
+  - `ir_news_analysis` (TEXT): 新規事業IR等の適時開示分析
+  - `updated_at` (TEXT): 最終生成日時
+
 #### 5.1.2 時系列・財務データ系テーブル
 J-Quantsから取得した日足株価、財務情報、および株式分割履歴を格納します。これらはバッチ処理による遡及調整（AdjFactor適用）の対象となります。
 
@@ -506,9 +529,26 @@ J-Quantsから取得した日足株価、財務情報、および株式分割履
   - `ticker`, `period_end_date` (TEXT, Composite PK): 銘柄コード、決算対象期末日（J-Quants `CurPerEn`。例: 2024-03-31）
   - `date` (TEXT): 最新の適時開示日（発表日）
   - `fiscal_quarter` (TEXT): 四半期会計区分（J-Quants `CurPerType`。例: 1Q, 2Q, 3Q, FY）
-  - `net_sales`, `operating_profit`, `profit` (REAL): 当期累計実績（※同日発表の業績予想修正など実績空行による上書きを防止する保護アップサート）
-  - `forecast_net_sales` 等 (REAL): 次期予想
-  - `eps`, `adj_eps`, `adj_dividend` 等 (REAL): 1株当たり指標
+  - `net_sales` (REAL): 売上高（当期累計実績）
+  - `operating_profit` (REAL): 営業利益（当期累計実績）
+  - `ordinary_profit` (REAL): 経常利益（当期累計実績）
+  - `profit` (REAL): 当期純利益（当期累計実績）
+  - `equity_to_asset_ratio` (REAL): 自己資本比率
+  - `shares_outstanding` (REAL): 期末発行済株式数
+  - `adj_shares_outstanding` (REAL): 株式分割遡及調整後発行済株式数
+  - `forecast_net_sales` (REAL): 次期予想売上高
+  - `forecast_operating_profit` (REAL): 次期予想営業利益
+  - `forecast_profit` (REAL): 次期予想当期純利益
+  - `forecast_dividend` (REAL): 次期予想1株当たり配当金
+  - `eps` (REAL): 1株当たり当期純利益（生値）
+  - `adj_eps` (REAL): 遡及調整後1株当たり当期純利益
+  - `adj_dividend` (REAL): 遡及調整後1株当たり年間配当金
+  - `total_assets` (REAL): 総資産
+  - `equity` (REAL): 自己資本（純資産）
+  - `operating_cash_flow` (REAL): 営業活動によるキャッシュフロー
+  - `investing_cash_flow` (REAL): 投資活動によるキャッシュフロー
+  - `financing_cash_flow` (REAL): 財務活動によるキャッシュフロー
+  - `cash_and_equivalents` (REAL): 現金及び現金同等物期末残高
   - インデックス: `idx_financials_period (ticker, period_end_date)`
 - **`stock_splits` (株式分割履歴)**
   - `ticker`, `date` (TEXT, Composite PK), `factor` (REAL): 遡及調整用の分割係数
@@ -516,8 +556,88 @@ J-Quantsから取得した日足株価、財務情報、および株式分割履
   - `id` (TEXT PK): ドキュメントID
   - `ticker`, `title`, `date`, `pdf_path` (TEXT): 取得したIR資料の基本情報とローカル保存パス
   - `analyzed` (INTEGER): DoclingパースおよびAIメタデータ抽出が完了したかどうかのフラグ（0: 未解析, 1: 解析済）
+- **`sync_history` (データ同期履歴)**
+  - `key` (TEXT PK): 同期キー（例: `'last_sync'`）
+  - `synced_at` (TEXT): 最終同期完了日時（ISO 8601）
 
-#### 5.1.3 SEPA指標キャッシュテーブル
+#### 5.1.3 スクリーナー指標・キャッシュテーブル
+全上場銘柄のテクニカル指標、ファンダメンタル指標、決算日付情報を事前計算して保持するメインスクリーナーの基幹テーブルです。
+
+- **`stocks` (スクリーナーキャッシュ)**
+  - `src/lib/calculator.ts` の `calculateAndPopulateStocks()` によって日次データ同期時に一括再計算・更新されます。
+
+```sql
+CREATE TABLE IF NOT EXISTS stocks (
+  ticker TEXT PRIMARY KEY,
+  name TEXT,
+  market TEXT,
+  industry TEXT,
+  current_price REAL,
+  
+  -- トレンド指標
+  sma_25 REAL,
+  is_above_sma_25 BOOLEAN,
+  sma_25_deviation_pct REAL,
+  is_above_sma_75 BOOLEAN,
+  is_above_sma_200 BOOLEAN,
+  is_golden_cross BOOLEAN,
+  is_perfect_order BOOLEAN,
+  long_term_trend TEXT,
+  
+  -- ブレイクアウト・高値
+  high_52w REAL,
+  high_52w_deviation REAL,
+  distance_to_high_52w_pct REAL,
+  is_high_20d_update BOOLEAN,
+  is_high_60d_update BOOLEAN,
+  is_high_52w_update BOOLEAN,
+  
+  -- モメンタム・流動性
+  avg_trading_value_5d REAL,
+  volume_ratio REAL,
+  trading_value_ratio REAL,
+  rsi REAL,
+  roc REAL,
+  return_5d_pct REAL,
+  return_20d_pct REAL,
+  
+  -- ファンダメンタルズ・決算
+  market_cap REAL,
+  operating_margin_pct REAL,
+  equity_ratio_pct REAL,
+  dividend_yield_pct REAL,
+  revenue_growth_pct REAL,
+  operating_profit_growth_pct REAL,
+  eps_growth_pct REAL,
+  forecast_achievement_pct REAL,
+  
+  earnings_date TEXT,
+  days_since_earnings INTEGER,
+  next_earnings_date_prediction TEXT,
+  remaining_business_days INTEGER,
+  post_earnings_rise_pct REAL,
+  earnings_reaction_pct REAL,
+  drop_from_post_earnings_high_pct REAL,
+  
+  -- テクニカル・リスク・バリュエーション指標
+  macd REAL,
+  macd_signal REAL,
+  atr_14 REAL,
+  atr_pct REAL,
+  stop_loss_2atr REAL,
+  stop_loss_3atr REAL,
+  max_drawdown REAL,
+  volatility REAL,
+  per REAL,
+  pbr REAL,
+  psr REAL,
+  roe REAL,
+  roa REAL,
+  gics_sub_industry_id TEXT
+);
+```
+
+#### 5.1.4 SEPA指標キャッシュテーブル
 - **`sepa_metrics` (SEPA指標・VCP候補キャッシュ)**
   - `src/lib/sepa/index.ts` の `calculateAndPopulateSepa()` によって一括計算・更新されるテーブル。全上場銘柄のトレンドテンプレート、日本株独自RSレーティング、3ヶ月単体四半期ファンダメンタルズ、VCP・ピボット指標を保持します。
 
@@ -722,6 +842,51 @@ export interface SepaStockRecord extends SepaTrendMetrics, SepaRsMetrics, SepaFu
 }
 ```
 
+#### 5.1.5 マイテーマ・ウォッチリスト系テーブル
+ユーザーが保存したカスタムテーマおよびウォッチリストの追跡データを格納します。
+
+- **`custom_themes` (マイテーマ基本情報)**: ユーザーが作成した動的テーマの定義。
+```sql
+CREATE TABLE IF NOT EXISTS custom_themes (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  created_at TEXT
+);
+```
+
+- **`custom_theme_stocks` (マイテーマ構成銘柄)**: マイテーマに紐づく構成銘柄と類似度スコア。
+```sql
+CREATE TABLE IF NOT EXISTS custom_theme_stocks (
+  theme_id TEXT,
+  ticker TEXT,
+  similarity_score REAL,
+  PRIMARY KEY (theme_id, ticker)
+);
+```
+
+- **`watchlist_items` (統合ウォッチリスト)**: 全画面（スクリーナー、SEPA、セクター資金流入、個別詳細）から登録されたウォッチ銘柄情報。登録日株価やメモを保持します。
+```sql
+CREATE TABLE IF NOT EXISTS watchlist_items (
+  id TEXT PRIMARY KEY,
+  ticker TEXT NOT NULL UNIQUE,
+  source TEXT NOT NULL,
+  added_price REAL NOT NULL,
+  added_date TEXT NOT NULL,
+  notes TEXT,
+  target_price REAL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
+
+#### 5.1.6 FTS5 全文検索仮想テーブル
+高速なSparse全文検索およびハイブリッド検索（RRF）を支えるSQLite FTS5仮想テーブルです。
+
+- **`equities_fts`**: 銘柄の企業名、要約文、機能的価値キーワードに対するBM25全文検索インデックス。
+  - カラム: `ticker UNINDEXED`, `name`, `theme`, `summary`, `theme_keywords`
+- **`gics_fts`**: GICSカテゴリ名称および解説文に対するBM25全文検索インデックス。
+  - カラム: `sub_industry_id UNINDEXED`, `name`, `description`
+
 ### 5.2 Qdrant ベクトルデータベース (Vector DB)
 自然言語による意味検索（Semantic Search）やRAG（Retrieval-Augmented Generation）のためのベクトルストアです。
 
@@ -769,6 +934,10 @@ RESTfulなエンドポイント設計を基本としつつ、LLM呼び出しや�
   - **用途**: `ir_news` テーブルから新規事業関連の適時開示資料の一覧（最新50件、またはティッカー指定）を取得します。
 - **`GET /api/pdf-preview`**
   - **用途**: ローカル環境に保存されたPDFファイル（決算書やIRニュース等）のパスを受け取り、ブラウザ上で安全にインライン表示（プレビュー）するためのプロキシAPIです。
+- **`POST /api/stocks/[ticker]/gics`**
+  - **用途**: 個別銘柄詳細画面からユーザーがGICS細分類を手動選択した際、小分類・中分類・セクター名を自動逆算し、`equities_master`、`stocks`、`sepa_metrics` の3テーブルへ即時反映します。
+  - **リクエスト**: `{ "subIndustryId": "20101010" }` (4桁/5桁ticker相互正規化対応)
+  - **レスポンス**: `{ "success": true, "subIndustryId": "...", "subIndustryName": "...", "sectorName": "..." }`
 
 ### 6.2 マイテーマ（ポートフォリオ）管理API
 - **`GET /api/themes`**
@@ -811,6 +980,16 @@ RESTfulなエンドポイント設計を基本としつつ、LLM呼び出しや�
          - 返却された各銘柄の生スコアを `rerank_score` に格納し、表示スコア `search_score` を `rerank_score` で上書き。
          - リランカーAPIエラーまたはタイムアウト時は、フォールバックとして元の `rrfScore` を維持。
          - 全件を `search_score` の降順でソートし、最上位50件（Top 50）をフロントエンドへ返却。
+- **`GET /api/themes/sector-inflow`**
+  - **用途**: GICSセクター（6桁Industryまたは4桁Industry Group）の資金流入度・内部構造・モメンタムを統合スコアリング（0〜100点）し、相場進行段階（⚡📊初動＋トレンド一致等）および先行初動レーダー4大指標、構成銘柄ドリルダウン一覧（支持帯状態バッジ付き）を取得します。
+  - **クエリパラメータ**:
+    - `period`: 集計期間 (`5` | `20` | `60`、デフォルト `20`)
+    - `level`: 分類階層 (`'industry'` | `'industry_group'`、デフォルト `'industry'`)
+  - **レスポンス形式**: `SectorInflowApiResponse` (インメモリキャッシュ60秒TTL)
+- **`POST /api/themes/earnings-search`**
+  - **用途**: Qdrantの `earnings_reports` コレクションを対象に、決算書（PDFパース済みMarkdown）の全文キーワード検索（Scroll）または `bge-m3` による意味ベクトル検索（Search）を横断実行します。
+  - **リクエスト**: `{ "query": "検索文字列", "onlyLatest": true, "limit": 50 }`
+  - **レスポンス形式**: `{ "success": true, "query": "...", "results": [ /* EarningsSearchResultItem[] */ ] }`
 - **`GET /api/themes/anomalies`**
   - **用途**: `gics_audit_status = 'ERROR'` の銘柄を検索し、LLM監査によってGICS分類が不適切と判定された異常値銘柄を検知・取得します。
 
@@ -869,23 +1048,24 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
     ```
 
 - **`GET /api/sepa/vcp-candidates`**
-  - **用途**: VCP収縮、ピボットブレイクアウト候補、および25日/50日SMAプルバック（押し目）銘柄一覧を取得します。
+  - **用途**: VCP収縮、ピボットブレイクアウト候補、および21日EMA/50日SMAプルバック（押し目）銘柄一覧を取得します。
   - **クエリパラメータ**:
     - `mode`: 
       - `'strict_funda'`: Stage 2 + コア成長 Tier 1 (`is_trend_template_pass = 1 AND rs_rating >= 80` かつ 売上+10%↑, EPS+20%↑/黒字転換, デフォルト)
-      - `'stage2_pullback_25'`: ★ 25日SMA押し目モード (`is_pullback_25 = 1 AND rs_rating >= 75`。構造的Stage 2 + 高値調整 -3%〜-12% + 25日線乖離 -1.5%〜+3.5% + 出来高枯渇比 <= 0.75 + 大商い下落日なし + 60日最大DD >= -30%)
+      - `'stage2_pullback_21_ema'`: ★ 21日EMA押し目モード (`is_pullback_21_ema = 1 AND rs_rating >= 75`。構造的Stage 2 + 高値調整 -3%〜-12% + 21日EMA乖離 -1.5%〜+3.5% + 出来高枯渇比 <= 0.75 + 大商い下落日なし + 60日最大DD >= -30%)
       - `'stage2_pullback_50'`: 50日SMA押し目モード (`is_pullback_50 = 1 AND rs_rating >= 75`。構造的Stage 2 + 高値調整 -5%〜-20% + 50日線乖離 -2.0%〜+3.5% + 出来高枯渇比 <= 0.75 + 大商い下落日なし + 60日最大DD >= -30%)
+      - `'breakout_pullback'`: ブレイク後初回押し目モード (`(is_pullback_21_ema = 1 OR is_pullback_50 = 1) AND has_breakout_prior = 1 AND rs_rating >= 75`。過去3〜25日前のベース突破ブレイクアウト後の初押し)
       - `'all'`: 全VCP候補 `is_trend_template_pass = 1 AND (is_near_pivot = 1 OR is_volume_dryup = 1 OR is_volatility_contracted = 1)`
     - `sweet_spot_cap`: `'true'` の場合 時価総額100〜1,000億円のオーバーレイ (`market_cap >= 100 AND market_cap <= 1000`)
     - `mid_large_cap`: `'true'` の場合 時価総額300〜3,000億円のオーバーレイ (`market_cap >= 300 AND market_cap <= 3000`)
     - `min_liquidity`: `'true'` の場合 5日平均売買代金1億円以上のオーバーレイ (`avg_trading_value_5d >= 1.0`)
     - `exclude_etf`: 投信・ETF・ETN・REIT等の非事業会社を除外 (`'true'` または未指定の場合 `is_operating_company = 1`、`'false'` で全銘柄)
-    - `sort_by`: ソート対象カラム名 (`ticker`, `current_price`, `pivot_price`, `pivot_distance_pct`, `dist_sma25_pct`, `dist_sma50_pct`, `pullback_depth_pct`, `min_vdu_ratio`, `atr_contraction_ratio`, `volume_dryup_ratio`, `rs_rating`, `market_cap`, `funda_score`)
+    - `sort_by`: ソート対象カラム名 (`ticker`, `current_price`, `pivot_price`, `pivot_distance_pct`, `dist_ema21_pct`, `dist_sma25_pct`, `dist_sma50_pct`, `pullback_depth_pct`, `min_vdu_ratio`, `atr_contraction_ratio`, `volume_dryup_ratio`, `rs_rating`, `market_cap`, `funda_score`, `days_since_breakout`, `breakout_date`, `pullback_from_breakout_high_pct`)
     - `order`: 昇順/降順 (`'asc'` または `'desc'`, デフォルト `'desc'`)
     - `page`: ページ番号 (デフォルト `1`)
     - `limit`: 1ページあたりの件数 (デフォルト `50`, 最大 `100`)
   - **ソート順**: 
-    - `stage2_pullback_25`: 未指定時は `ORDER BY rs_rating DESC, dist_sma25_pct ASC`
+    - `stage2_pullback_21_ema`: 未指定時は `ORDER BY rs_rating DESC, dist_ema21_pct ASC`
     - `stage2_pullback_50`: 未指定時は `ORDER BY rs_rating DESC, dist_sma50_pct ASC`
     - その他通常時: 未指定時は `ORDER BY is_pivot_breakout DESC, is_near_pivot DESC, pivot_distance_pct DESC, rs_rating DESC`
   - **レスポンス形式**:
@@ -914,6 +1094,60 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
       }
     }
     ```
+
+### 6.6 市場地合い判定 (Market Regime) API
+- **`GET /api/market-regime`**
+  - **用途**: TOPIX・日経225のトレンド、市場内部構造（50MA/200MA/Stage2比率）、ディストリビューション日および急落シグナルを統合評価し、相場環境の3段階ステータス（🟢地合い良好 / 🟡調整警戒 / 🔴下落警戒）と各判定指標の現在値を返却します。
+  - **レスポンス形式**:
+    ```json
+    {
+      "asOfDate": "2026-09-25",
+      "regime": "NEUTRAL",
+      "label": "🟡 調整警戒（ロット半減・押し目厳選）",
+      "checklist": {
+        "topixAboveSma50": true,
+        "topixSma50Above200": true,
+        "breadthSma50Pass": false,
+        "stage2BreadthPass": true,
+        "noDistributionClustered": true,
+        "noPlungeSignal": true
+      },
+      "metrics": {
+        "topixClose": 2750.5,
+        "topixSma50": 2720.0,
+        "topixSma200": 2680.0,
+        "breadthSma50Pct": 48.5,
+        "stage2Pct": 22.1,
+        "distributionDaysCount": 2,
+        "isPlungeSignal": false
+      }
+    }
+    ```
+
+### 6.7 統合ウォッチリスト API
+- **`GET /api/watchlist`**
+  - **用途**: ウォッチリストに登録された銘柄一覧を取得します。
+  - **クエリパラメータ**:
+    - `mode`: `'tickers'` 指定時は登録済みティッカー文字列配列のみを高速返却。未指定時は `stocks` および `sepa_metrics` をJOINした完全な現在指標・登録来パフォーマンス付きリストを返却。
+  - **レスポンス形式**: `{ "items": [ /* WatchlistItemDetail[] */ ] }` または `{ "tickers": ["7203", "6758"] }`
+- **`POST /api/watchlist`**
+  - **用途**: 銘柄をウォッチリストに新規登録します（重複時は400エラー）。登録時の終値・日付を自動キャプチャ。
+  - **リクエスト**: `{ "ticker": "7203", "source": "sepa", "notes": "21EMA押し目反発監視", "targetPrice": 3500 }`
+  - **レスポンス**: `{ "success": true, "item": { ... } }`
+- **`PATCH /api/watchlist/[ticker]`**
+  - **用途**: 登録済み銘柄のメモ (`notes`) や目標株価 (`targetPrice`) をインライン更新します。
+  - **リクエスト**: `{ "notes": "更新後メモ", "targetPrice": 3800 }`
+  - **レスポンス**: `{ "success": true, "item": { ... } }`
+- **`DELETE /api/watchlist/[ticker]`**
+  - **用途**: 指定銘柄をウォッチリストから解除・削除します。
+  - **レスポンス**: `{ "success": true }`
+
+### 6.8 ナレッジベース・ドキュメント API
+- **`GET /api/docs`**
+  - **用途**: システム解説ドキュメント（Markdownファイル群）のメタデータ一覧、または指定ドキュメントの本文を取得します。パストラバーサル防止ガード搭載。
+  - **クエリパラメータ**:
+    - `id`: ドキュメントID（例: `'sepa-guide'`, `'market-regime-guide'`）。省略時は全ドキュメントのレジストリ一覧を返却。
+  - **レスポンス形式**: `{ "doc": { ... }, "content": "# Markdown本文..." }` または `{ "docs": [ ... ] }`
 
 ## 7. コアロジックと計算アルゴリズム (Core Logic & Algorithms)
 
@@ -1008,7 +1242,7 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
 3. **200日SMAが上向き（最低1ヶ月/22営業日以上）**: 22日間のSMA200の線形回帰傾きがプラス（$\beta > 0$）
 4. **50日SMA > 150日SMA かつ 50日SMA > 200日SMA**
 5. **株価 > 50日SMA**
-6. **株価が52週安値から最低30%以上上昇（$\ge +30\%$）**
+6. **株価が52週安値から最低25%以上上昇（$\ge +25\%$）**
 7. **株価が52週高値から25%以内（`within_52w_high_pct` $\ge -25\%$）**
 8. **RSレーティング $\ge 70$（後述）**
 ※IPO新興株バイパス: 200営業日未満のIPO銘柄については、SMA200関連条件をスキップし、データ存在する期間（SMA50等）でのみ判定。
@@ -1029,7 +1263,7 @@ SEPAダッシュボードおよび個別診断ビューをサポートするRout
 6. **出来高ドライアップ率（`volume_dryup_ratio`）**: 直近5日平均出来高 / 過去50日平均出来高 が $0.60$ 未満（過去平均の60%以下に売り玉枯渇で `is_volume_dryup = 1`）。
 7. **セットアップ・ブレイクアウト判定**:
    - ピボット接近（セットアップ圏内: `is_near_pivot`）: 健全ハンドル（$pivot \ge base\_high \times 0.85$）かつ 当日終値がピボット価格の $-5.0\% \sim 0.0\%$ 圏内。
-   - ピボットブレイクアウト（`is_pivot_breakout`）: 健全ハンドル かつ 当日終値がピボット価格を上放れ（$0.0\% \sim +3.0\%$）かつ 当日出来高が50日平均の1.5倍以上（$Volume_{today} \ge Vol_{50d\_avg} \times 1.5$）。
+   - ピボットブレイクアウト（`is_pivot_breakout`）: 健全ハンドル かつ 当日終値がピボット価格を上放れ（$0.0\% \sim +5.0\%$）かつ 当日出来高が50日平均の1.5倍以上（$Volume_{today} \ge Vol_{50d\_avg} \times 1.5$）。
 
 #### 7.2.5 ミネルヴィニ流プルバック（押し目）物理計算エンジン (`pullback_screener.ts`)
 ブレイクアウト後の初押し、または強力な上昇トレンド中の移動平均線サポート（21日EMAおよび50日SMA）からの反発局面を機械的かつ厳密に検知するアルゴリズムです。短期モメンタムにはスーパーストックの浅い押し目を鋭敏に捉える21日EMAを採用し、本格調整には機関投資家の防衛ラインである50日SMAを適用します。
@@ -1427,7 +1661,7 @@ LLM（とくにローカルのgemma3:12b等）は指定フォーマットを逸�
 | **ピボット接近判定レンジ** | `-5.0% 〜 0.0%` | 健全ハンドルかつ現在終値がピボット価格から-5%以内のセットアップ圏内。 |
 | **ATR収縮比率 (`ATR10 / ATR50`)** | `< 0.70` | 短期10日ATRが長期50日ATRの70%未満（30%以上の値幅収縮）で収縮判定。 |
 | **出来高枯渇比率 (`Vol5 / Vol50`)** | `< 0.60` | 5日平均出来高が50日平均の60%以下（40%以上の枯渇）でVDU判定。 |
-| **ピボットブレイクアウト判定** | `0.0% 〜 +3.0%` かつ 当日出来高 >= 50日平均 × 1.5 | 健全ハンドルからピボットを出来高急増を伴って上放れた状態を即時検知。 |
+| **ピボットブレイクアウト判定** | `0.0% 〜 +5.0%` かつ 当日出来高 >= 50日平均 × 1.5 | 健全ハンドルからピボットを出来高急増を伴って上放れた状態を即時検知（オニール・ミネルヴィニ流買い推奨ゾーン）。 |
 | **Tier 1 四半期売上高成長閾値** | `>= +10.0%` | 四半期単体売上高の前年同期比成長率（必須ハードフィルター）。 |
 | **Tier 1 四半期EPS急成長閾値** | `>= +20.0%` または `TURNAROUND` | 四半期単体EPSの前年同期比成長率（黒字転換も適格、必須ハードフィルター）。 |
 | **Tier 2 成長加速判定足切り** | 売上 `>= +10.0%` または EPS `>= +15.0%` | 赤字縮小や超低成長の加速偽シグナルを排除する必須足切り水準。 |
@@ -1454,8 +1688,10 @@ LLM（とくにローカルのgemma3:12b等）は指定フォーマットを逸�
 | **🔥 強烈な資金流入** | スコア `>= 80` かつ 業種騰落 `> 0` かつ 超過RS `> 0` | セクター上昇とTOPIXアウトパフォームの完全合致。 |
 | **📈 上昇（市場劣後）** | スコア `>= 80` かつ 業種騰落 `> 0` かつ 超過RS `<= 0` | 業種自体は上昇しているが相場全体の勢いに劣後。 |
 | **⚖ 相対優位（地合い不良）** | スコア `>= 80` だが 業種騰落 `<= 0` | 全面安局面の相対的な下げ渋り・ディフェンシブ。 |
-| **ドリルダウン排他バッジ** | 1:🔥反発トリガー, 2:🚀直近ブレイク, 3:★25MA押し目, 4:★50MA押し目 | 個別銘柄のSEPA状態を優先順位に基づき単一バッジ化。 |
-| **押し目乖離率レンジ** | `-1.5% 〜 +3.5`% | 25MA/50MA支持帯テストのSEPA正規仕様に完全統一。 |
+| **ドリルダウン排他バッジ** | 1: 反発確認（前日高値上抜け）<br> 2: 21EMA支持帯（調整中）<br> 3: 50日線支持帯（調整中）<br> 4: ― (通常) | 個別銘柄のSEPA押し目・反発状態を優先順位（1〜4）に基づき排他バッジ化。 |
+| **押し目支持帯乖離率レンジ** | 21EMA: `-1.5% 〜 +3.5%` <br> 50MA: `-2.0% 〜 +3.5%` | スーパーストックの浅い押し目（21EMA）と機関投資家防衛ライン（50SMA）のSEPA正規仕様に完全統一。 |
+| **先行初動レーダー (Early Radar)** | 4大指標 (0〜100点均等分布) | ① ステルス集積指数 (出来高増かつ値動き抑制)<br> ② 出来高点火率 (% 代金急増)<br> ③ 市場逆行耐性比率 (% 対市場アウトパフォーム)<br> ④ 先導株先行アクション比率 (% 21EMA支持帯反発・ブレイク) |
+| **相場進行段階ステータス** | 3段階進行バッジ | ⚡📊 **初動＋トレンド一致** (`both_confluent`: 初動・トレンド双方が上位20% Q1)<br> ⚡ **初動兆候のみ** (`early_only`: 先行初動のみ上位20%)<br> 📊 **トレンド確認のみ** (`trend_only`: トレンドのみ上位20%)<br> ⚖ **中立** (`neutral`) |
 
 ### 9.5 個別企業分析 GICS細分類手動選択・自動逆算・DB即時反映仕様
 | 設定項目 | 仕様・実装内容 | 説明 |
